@@ -157,11 +157,10 @@ function CoachPage() {
     <main className="page-shell">
       <section className="hero-panel">
         <div>
-          <p className="eyebrow">Navisnet Coach Workspace</p>
-          <h1>Sistema di Creazione Scheda</h1>
+          <p className="eyebrow">SESSION.AI COACH</p>
+          <h1>Moltiplica il Tuo Metodo</h1>
           <p className="hero-copy">
-            Questa area ti guida nella creazione prototipale della scheda.
-            Segui i 4 step e condividi il risultato con l'atleta.
+            Carica le schede che hai già fatto. L'IA impara il tuo stile e ne genera di nuove, identiche alle tue, in 30 secondi.
           </p>
         </div>
       </section>
