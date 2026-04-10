@@ -347,3 +347,50 @@ p { margin: 0; }
   color: var(--ink); font-weight: 600;
   border: 2px dashed var(--line-strong);
 }
+
+/* Utilities */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  h1 {
+    font-size: clamp(2rem, 10vw, 3rem);
+  }
+  .page-shell, .athlete-shell {
+    padding-top: 24px;
+    padding-bottom: 100px;
+    width: min(100%, calc(100vw - 24px));
+  }
+  .panel, .timer-card, .athlete-hero, .metric-card, .exercise-main-card, .capture-panel {
+    padding: 1.5rem;
+    border-radius: 1.5rem;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .wizard-step {
+    padding: 1.25rem;
+  }
+  .timer-number {
+    font-size: 4.5rem;
+  }
+  .exercise-title {
+    font-size: 1.75rem;
+  }
+  .sticky-nav {
+    width: calc(100% - 24px);
+    bottom: 16px;
+  }
+}
+
