@@ -485,24 +485,26 @@ function AthletePage() {
                 placeholder="Lascia un feedback per il coach, dolore provato, sensazioni o carichi veri usati..."
                 value={feedbackMap[currentExercise.id] || ''}
                 onChange={(e) => setFeedbackMap(prev => ({ ...prev, [currentExercise.id]: e.target.value }))}
-                style={{ width: '100%', minHeight: '80px', padding: '16px', borderRadius: '1rem', border: '1px solid var(--line-strong)', background: '#f8fafc', fontSize: '0.95rem' }}
+                style={{ width: '100%', minHeight: '80px', padding: '16px', borderRadius: '1rem', border: '1px solid var(--line-strong)', background: '#f8fafc', fontSize: '0.95rem', fontFamily: 'Inter' }}
              />
           </div>
 
-          <button className="primary-button" style={{ padding: '20px', fontSize: '1.2rem', marginTop: '10px' }} onClick={handleCompleteSeries}>
-             {isLastSeries ? (isLastExercise ? 'COMPLETA SESSIONE' : 'COMPLETA E VAI AL PROSSIMO ESERCIZIO') : `COMPLETA SERIE ${seriesIndex + 1}`}
-          </button>
         </section>
       )}
 
       {!isOverview && (
-        <nav className="sticky-nav">
-          <button className="ghost-button" onClick={goToPreviousExercise} disabled={isFirstExercise}>
-            <ChevronLeft size={18} /> Prec
+        <nav className="sticky-nav" style={{ flexDirection: 'column', gap: '8px', padding: '12px' }}>
+          <button className="primary-button" style={{ width: '100%', padding: '16px', fontSize: '1.1rem', borderRadius: '1rem' }} onClick={handleCompleteSeries}>
+             {isLastSeries ? (isLastExercise ? 'FINE WORKOUT 🏆' : 'PROSSIMO ESERCIZIO') : `COMPLETA SERIE ${seriesIndex + 1}`}
           </button>
-          <button className="ghost-button" onClick={goToNextExercise} disabled={isLastExercise}>
-            Succ <ChevronRight size={18} />
-          </button>
+          <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+            <button className="ghost-button" style={{ flex: 1, padding: '12px' }} onClick={goToPreviousExercise} disabled={isFirstExercise}>
+              <ChevronLeft size={16} /> Prec
+            </button>
+            <button className="ghost-button" style={{ flex: 1, padding: '12px' }} onClick={goToNextExercise} disabled={isLastExercise}>
+              Succ <ChevronRight size={16} />
+            </button>
+          </div>
         </nav>
       )}
     </main>
