@@ -296,11 +296,13 @@ function AthletePage() {
   
   // Interactive Flow State
   const [sessionIndex, setSessionIndex] = useState(0)
+  const [isOverview, setIsOverview] = useState(true)
   const [exerciseIndex, setExerciseIndex] = useState(0)
   const [seriesIndex, setSeriesIndex] = useState(0)
   const [isResting, setIsResting] = useState(false)
   
   const [cameraPreviewUrl, setCameraPreviewUrl] = useState<string | null>(null)
+  const [feedbackMap, setFeedbackMap] = useState<Record<string, string>>({})
 
   useEffect(() => {
     // Mock Load based on the request
@@ -393,6 +395,7 @@ function AthletePage() {
             className={`session-tab ${index === sessionIndex ? 'is-active' : ''}`}
             onClick={() => {
               setSessionIndex(index)
+              setIsOverview(true)
               setExerciseIndex(0)
               setSeriesIndex(0)
               setIsResting(false)
@@ -404,7 +407,26 @@ function AthletePage() {
         ))}
       </section>
 
-      {isResting ? (
+      {isOverview ? (
+        <section className="exercise-main-card">
+          <h2 className="exercise-title">Overview: {currentSession.title}</h2>
+          <p className="muted" style={{ marginBottom: '24px', fontSize: '1.2rem' }}>{currentSession.focus}</p>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
+            {currentSession.exercises.map((ex, idx) => (
+              <div key={ex.id} style={{ padding: '16px', background: '#f8fafc', borderRadius: '1rem', border: '1px solid var(--line-strong)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{ex.block}</div>
+                <div style={{ fontWeight: 600, color: 'var(--ink)', fontSize: '1.1rem', marginTop: '4px' }}>{idx + 1}. {ex.name}</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--muted)', marginTop: '6px', fontWeight: 500 }}>{ex.prescription}</div>
+              </div>
+            ))}
+          </div>
+
+          <button className="primary-button" style={{ padding: '20px', fontSize: '1.1rem'}} onClick={() => setIsOverview(false)}>
+            INIZIA SESSIONE <Play size={20} />
+          </button>
+        </section>
+      ) : isResting ? (
         <RestTimer initialSeconds={currentExercise.restSeconds} onComplete={handleRestComplete} />
       ) : (
         <section className="exercise-main-card">
@@ -457,20 +479,32 @@ function AthletePage() {
             )}
           </div>
 
+          <div style={{ marginTop: '16px' }}>
+             <p className="eyebrow" style={{ color: 'var(--ink)' }}>Note Atleta per il Coach</p>
+             <textarea 
+                placeholder="Lascia un feedback per il coach, dolore provato, sensazioni o carichi veri usati..."
+                value={feedbackMap[currentExercise.id] || ''}
+                onChange={(e) => setFeedbackMap(prev => ({ ...prev, [currentExercise.id]: e.target.value }))}
+                style={{ width: '100%', minHeight: '80px', padding: '16px', borderRadius: '1rem', border: '1px solid var(--line-strong)', background: '#f8fafc', fontSize: '0.95rem' }}
+             />
+          </div>
+
           <button className="primary-button" style={{ padding: '20px', fontSize: '1.2rem', marginTop: '10px' }} onClick={handleCompleteSeries}>
              {isLastSeries ? (isLastExercise ? 'COMPLETA SESSIONE' : 'COMPLETA E VAI AL PROSSIMO ESERCIZIO') : `COMPLETA SERIE ${seriesIndex + 1}`}
           </button>
         </section>
       )}
 
-      <nav className="sticky-nav">
-        <button className="ghost-button" onClick={goToPreviousExercise} disabled={isFirstExercise}>
-          <ChevronLeft size={18} /> Prec
-        </button>
-        <button className="ghost-button" onClick={goToNextExercise} disabled={isLastExercise}>
-          Succ <ChevronRight size={18} />
-        </button>
-      </nav>
+      {!isOverview && (
+        <nav className="sticky-nav">
+          <button className="ghost-button" onClick={goToPreviousExercise} disabled={isFirstExercise}>
+            <ChevronLeft size={18} /> Prec
+          </button>
+          <button className="ghost-button" onClick={goToNextExercise} disabled={isLastExercise}>
+            Succ <ChevronRight size={18} />
+          </button>
+        </nav>
+      )}
     </main>
   )
 }
