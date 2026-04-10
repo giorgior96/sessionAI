@@ -380,13 +380,15 @@ function AthletePage() {
 
   return (
     <main className="athlete-shell">
-      <section className="athlete-hero">
-        <div>
-          <p className="eyebrow">{share.weekLabel}</p>
-          <h1>{share.athleteName}</h1>
-          <p className="hero-copy">{share.programTitle}</p>
-        </div>
-      </section>
+      {isOverview && (
+        <section className="athlete-hero">
+          <div>
+            <p className="eyebrow">{share.weekLabel}</p>
+            <h1>{share.athleteName}</h1>
+            <p className="hero-copy">{share.programTitle}</p>
+          </div>
+        </section>
+      )}
 
       <section className="session-tabs">
         {share.sessions.map((session, index) => (
@@ -438,55 +440,57 @@ function AthletePage() {
           
           <p className="muted" style={{ fontSize: '1.1rem' }}>{currentExercise.notes}</p>
 
-          <div className="series-tracker">
+          <div className="series-tracker" style={{ margin: '16px 0' }}>
              <div className="series-dots">
                 {Array.from({ length: seriesTotal }).map((_, i) => (
-                   <div key={i} className={`series-dot ${i < seriesIndex ? 'done' : i === seriesIndex ? 'current' : ''}`} />
+                   <div key={i} className={`series-dot ${i < seriesIndex ? 'done' : i === seriesIndex ? 'current' : ''}`} style={{ height: '6px' }} />
                 ))}
              </div>
-             <p className="eyebrow">Serie {seriesIndex + 1} di {seriesTotal}</p>
+             <p className="eyebrow" style={{ marginTop: '8px' }}>Serie {seriesIndex + 1} di {seriesTotal}</p>
           </div>
 
-          <div className="capture-panel">
-            {showCamera ? (
-              <>
-                <p className="panel-kicker" style={{ color: 'var(--ink)' }}>Registra Serie</p>
-                {currentExercise.filmPrompt && <p className="muted" style={{ marginBottom: '15px' }}>{currentExercise.filmPrompt}</p>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {showCamera && (
+              <div className="capture-panel" style={{ padding: '16px', borderRadius: '1rem', background: '#eef2ff', borderColor: '#e0e7ff' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: currentExercise.filmPrompt ? '8px' : '0' }}>
+                  <p className="panel-kicker" style={{ color: 'var(--primary)', margin: 0 }}>Registra Video</p>
+                  <label className="camera-button" style={{ width: 'auto', padding: '8px 16px', fontSize: '0.85rem', margin: 0, background: 'var(--primary)', color: 'white', border: 'none' }}>
+                    <Camera size={16} /> APRI
+                    <input 
+                      type="file" 
+                      accept="video/*" 
+                      capture="environment" 
+                      className="visually-hidden"
+                      onChange={(e) => {
+                         const file = e.target.files?.[0]
+                         if (file) {
+                            setCameraPreviewUrl(URL.createObjectURL(file))
+                         }
+                      }}
+                    />
+                  </label>
+                </div>
+                {currentExercise.filmPrompt && <p className="muted" style={{ fontSize: '0.85rem', margin: 0 }}>{currentExercise.filmPrompt}</p>}
                 
-                <label className="camera-button">
-                  <Camera size={24} /> APRI FOTOCAMERA
-                  <input 
-                    type="file" 
-                    accept="video/*" 
-                    capture="environment" 
-                    className="visually-hidden"
-                    onChange={(e) => {
-                       const file = e.target.files?.[0]
-                       if (file) {
-                          setCameraPreviewUrl(URL.createObjectURL(file))
-                       }
-                    }}
-                  />
-                </label>
                 {cameraPreviewUrl && (
-                   <div className="camera-preview">
-                     Video Catturato con Successo
+                   <div className="camera-preview" style={{ height: 'auto', padding: '12px', marginTop: '12px', background: '#d1fae5', borderColor: '#10b981', color: '#047857' }}>
+                     Video Catturato ✔️
                    </div>
                 )}
-              </>
-            ) : (
-              <p className="muted">Nessuna indicazione video prioritaria per questo esercizio.</p>
+              </div>
             )}
-          </div>
 
-          <div style={{ marginTop: '16px' }}>
-             <p className="eyebrow" style={{ color: 'var(--ink)' }}>Note Atleta per il Coach</p>
-             <textarea 
-                placeholder="Lascia un feedback per il coach, dolore provato, sensazioni o carichi veri usati..."
-                value={feedbackMap[currentExercise.id] || ''}
-                onChange={(e) => setFeedbackMap(prev => ({ ...prev, [currentExercise.id]: e.target.value }))}
-                style={{ width: '100%', minHeight: '80px', padding: '16px', borderRadius: '1rem', border: '1px solid var(--line-strong)', background: '#f8fafc', fontSize: '0.95rem', fontFamily: 'Inter' }}
-             />
+            <details style={{ background: '#f8fafc', padding: '16px', borderRadius: '1rem', border: '1px solid var(--line-strong)' }}>
+               <summary style={{ fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', outline: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  Aggiungi Note o Feedback
+               </summary>
+               <textarea 
+                  placeholder="Es. dolore in spinta, carichi effettivi..."
+                  value={feedbackMap[currentExercise.id] || ''}
+                  onChange={(e) => setFeedbackMap(prev => ({ ...prev, [currentExercise.id]: e.target.value }))}
+                  style={{ width: '100%', minHeight: '60px', padding: '12px', borderRadius: '0.75rem', border: '1px solid var(--line-strong)', background: 'white', fontSize: '0.9rem', fontFamily: 'Inter', marginTop: '12px' }}
+               />
+            </details>
           </div>
 
         </section>
