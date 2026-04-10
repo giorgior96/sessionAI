@@ -332,6 +332,7 @@ function AthletePage() {
   const isFirstExercise = exerciseIndex === 0
   const isLastExercise = exerciseIndex === currentSession.exercises.length - 1
   const isLastSeries = seriesIndex >= seriesTotal - 1
+  const showCamera = currentExercise.cameraSuggested && (seriesIndex === 0 || isLastSeries)
 
   function handleCompleteSeries() {
     if (isLastSeries) {
@@ -425,7 +426,7 @@ function AthletePage() {
           </div>
 
           <div className="capture-panel">
-            {currentExercise.cameraSuggested ? (
+            {showCamera ? (
               <>
                 <p className="panel-kicker" style={{ color: 'var(--ink)' }}>Registra Serie</p>
                 {currentExercise.filmPrompt && <p className="muted" style={{ marginBottom: '15px' }}>{currentExercise.filmPrompt}</p>}
@@ -434,7 +435,7 @@ function AthletePage() {
                   <Camera size={24} /> APRI FOTOCAMERA
                   <input 
                     type="file" 
-                    accept="video/*,image/*" 
+                    accept="video/*" 
                     capture="environment" 
                     className="visually-hidden"
                     onChange={(e) => {
