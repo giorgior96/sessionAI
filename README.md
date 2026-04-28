@@ -39,6 +39,8 @@ Create `.env`:
 VITE_GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
 ```
 
+On Vercel, leave `VITE_API_BASE_URL` unset so `vercel.json` can proxy `/api` to the VPS backend.
+
 Optional backend model override:
 
 ```bash
