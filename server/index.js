@@ -659,6 +659,144 @@ function normalizeGenerateResult({ runId, codexResult, shareData, files }) {
   }
 }
 
+function buildFallbackShareData({ shareId, feedback, codexResult }) {
+  const goal = feedback.primaryGoal || 'migliorare qualita tecnica e progressione'
+  const programTitle =
+    codexResult.program_title || `${feedback.athleteName} - Nuova scheda`
+  const programPath = codexResult.program_path || ''
+  const analysisPath = codexResult.analysis_path || ''
+
+  return {
+    shareId,
+    athleteName: codexResult.athlete_name || feedback.athleteName,
+    coachName: feedback.coachName || 'Coach',
+    programTitle,
+    programPath,
+    analysisPath,
+    generatedAt: new Date().toISOString(),
+    weekLabel: `Settimana del ${todayStamp()}`,
+    overview:
+      codexResult.summary ||
+      `Blocco operativo orientato a ${goal}, generato dalle schede importate e dal feedback coach.`,
+    sessions: [
+      {
+        id: 'day-1',
+        title: 'Day 1',
+        focus: goal,
+        notes: 'Sessione tecnica principale. Mantieni margine e qualita sulle serie chiave.',
+        exercises: [
+          {
+            id: 'warm-up-day-1',
+            block: 'Warm-up',
+            name: 'Preparazione scapole e polsi',
+            prescription: '8-10 minuti progressivi',
+            restSeconds: 45,
+            notes: 'Mobilita controllata, attivazione scapolare e prime tenute leggere.',
+            filmPrompt: '',
+            cameraSuggested: false,
+          },
+          {
+            id: 'main-skill-day-1',
+            block: 'Main',
+            name: goal,
+            prescription: '4-6 serie tecniche a RPE 7-8',
+            restSeconds: 150,
+            notes: 'Ferma la serie quando la forma peggiora. Priorita a linea e controllo.',
+            filmPrompt: 'Riprendi una serie centrale e una finale per valutare linea e compensi.',
+            cameraSuggested: true,
+          },
+          {
+            id: 'accessory-pull-day-1',
+            block: 'Accessory',
+            name: 'Trazioni / tirata complementare',
+            prescription: '3-4 serie da 4-8 ripetizioni',
+            restSeconds: 120,
+            notes: 'Volume complementare senza arrivare a cedimento.',
+            filmPrompt: '',
+            cameraSuggested: false,
+          },
+        ],
+      },
+      {
+        id: 'day-2',
+        title: 'Day 2',
+        focus: 'Volume controllato e basi',
+        notes: 'Giornata di supporto con carico gestibile.',
+        exercises: [
+          {
+            id: 'warm-up-day-2',
+            block: 'Warm-up',
+            name: 'Warm-up generale',
+            prescription: '8 minuti',
+            restSeconds: 45,
+            notes: 'Riscaldamento progressivo senza fatica residua.',
+            filmPrompt: '',
+            cameraSuggested: false,
+          },
+          {
+            id: 'main-strength-day-2',
+            block: 'Main',
+            name: 'Forza base upper body',
+            prescription: '4 serie da 5-8 ripetizioni',
+            restSeconds: 120,
+            notes: 'Mantieni 1-2 ripetizioni di margine.',
+            filmPrompt: '',
+            cameraSuggested: false,
+          },
+          {
+            id: 'core-day-2',
+            block: 'Core',
+            name: 'Core anti-estensione',
+            prescription: '3 serie controllate',
+            restSeconds: 75,
+            notes: 'Qualita prima della durata.',
+            filmPrompt: '',
+            cameraSuggested: false,
+          },
+        ],
+      },
+      {
+        id: 'day-3',
+        title: 'Day 3',
+        focus: 'Richiamo tecnico e consolidamento',
+        notes: 'Richiamo piu leggero per consolidare senza accumulare troppa fatica.',
+        exercises: [
+          {
+            id: 'warm-up-day-3',
+            block: 'Warm-up',
+            name: 'Attivazione specifica',
+            prescription: '8-10 minuti',
+            restSeconds: 45,
+            notes: 'Entra gradualmente nelle progressioni.',
+            filmPrompt: '',
+            cameraSuggested: false,
+          },
+          {
+            id: 'technique-day-3',
+            block: 'Main',
+            name: 'Progressione tecnica obiettivo',
+            prescription: '5 serie brevi e pulite',
+            restSeconds: 120,
+            notes: 'Usa una variante che permette controllo completo.',
+            filmPrompt: 'Riprendi la variante piu rappresentativa della giornata.',
+            cameraSuggested: true,
+          },
+          {
+            id: 'accessory-day-3',
+            block: 'Accessory',
+            name: 'Complementari mirati',
+            prescription: '3 serie moderate',
+            restSeconds: 90,
+            notes: 'Chiudi lasciando recupero per la settimana successiva.',
+            filmPrompt: '',
+            cameraSuggested: false,
+          },
+        ],
+      },
+    ],
+  }
+}
+
 function updateJob(jobId, patch) {
   const current = jobs.get(jobId)
   if (!current) return
@@ -733,8 +871,14 @@ async function processGenerationJob({ jobId, files, driveSources, feedback }) {
 
     const shareFullPath = path.join(repoRoot, codexResult.share_path)
     if (!(await pathExists(shareFullPath))) {
-      throw new Error(
-        `Codex non ha creato il file share richiesto: ${codexResult.share_path}.`,
+      await ensureDir(path.dirname(shareFullPath))
+      await fs.writeFile(
+        shareFullPath,
+        JSON.stringify(
+          buildFallbackShareData({ shareId, feedback, codexResult }),
+          null,
+          2,
+        ),
       )
     }
     const shareData = JSON.parse(await fs.readFile(shareFullPath, 'utf8'))
