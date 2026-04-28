@@ -23,6 +23,7 @@ const codexModel = process.env.COACH_MVP_CODEX_MODEL ?? 'gpt-5.4-mini'
 const googleApiKey = process.env.GOOGLE_API_KEY ?? process.env.GOOGLE_DRIVE_API_KEY
 
 let runInProgress = false
+const jobs = new Map()
 
 const outputSchema = {
   type: 'object',
@@ -637,6 +638,136 @@ async function saveCheckinSource(feedback, uploadedSources, athleteSlug) {
   return relativePath
 }
 
+function normalizeGenerateResult({ runId, codexResult, shareData, files }) {
+  return {
+    runId,
+    summary: codexResult.summary,
+    athleteName: codexResult.athlete_name,
+    programTitle: codexResult.program_title,
+    rawSourcePaths: codexResult.raw_source_paths,
+    sourceNotePaths: codexResult.source_note_paths,
+    analysisPath: codexResult.analysis_path,
+    programPath: codexResult.program_path,
+    shareId: codexResult.share_id,
+    sharePath: codexResult.share_path,
+    updatedPaths: codexResult.updated_paths,
+    uploadedFiles: files.map((file) => ({
+      name: file.originalname,
+      sizeLabel: formatSize(file.size),
+    })),
+    shareData,
+  }
+}
+
+function updateJob(jobId, patch) {
+  const current = jobs.get(jobId)
+  if (!current) return
+  jobs.set(jobId, {
+    ...current,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+async function processGenerationJob({ jobId, files, driveSources, feedback }) {
+  runInProgress = true
+  updateJob(jobId, {
+    status: 'running',
+    progress: 10,
+    stage: 'Preparo fonti e wiki atleta',
+  })
+
+  try {
+    await ensureDir(rawSourcesDir)
+    await ensureDir(sharesDir)
+    await ensureDir(runsDir)
+
+    const athleteSlug = slugify(feedback.athleteName)
+    const runId = `${todayStamp()}-${athleteSlug}-${nowStamp()}`
+    const shareId = `${todayStamp()}-${athleteSlug}-${Date.now()}`
+    const shareRelativePath = path.relative(repoRoot, path.join(sharesDir, `${shareId}.json`))
+
+    updateJob(jobId, {
+      runId,
+      progress: 25,
+      stage: 'Salvo schede e commenti importati',
+    })
+
+    const relevantWikiPaths = await collectRelevantWikiPaths(feedback.athleteName)
+    const uploadedSourcePaths = [
+      ...(await saveUploadedSources(files, athleteSlug)),
+      ...(await saveDriveSources(Array.isArray(driveSources) ? driveSources : [], athleteSlug)),
+    ]
+
+    updateJob(jobId, {
+      progress: 38,
+      stage: 'Creo check-in coach',
+    })
+
+    const checkinSourcePath = await saveCheckinSource(
+      feedback,
+      uploadedSourcePaths,
+      athleteSlug,
+    )
+
+    const prompt = buildPrompt({
+      feedback,
+      uploadedSourcePaths,
+      checkinSourcePath,
+      relevantWikiPaths,
+      shareRelativePath,
+      shareId,
+    })
+
+    updateJob(jobId, {
+      progress: 48,
+      stage: 'Codex legge storico e fonti scientifiche',
+    })
+
+    const codexResult = await runCodex(prompt, runId)
+
+    updateJob(jobId, {
+      progress: 88,
+      stage: 'Creo link atleta',
+    })
+
+    const shareFullPath = path.join(repoRoot, codexResult.share_path)
+    const shareData = JSON.parse(await fs.readFile(shareFullPath, 'utf8'))
+
+    const runRecord = {
+      runId,
+      feedback,
+      uploadedSourcePaths,
+      checkinSourcePath,
+      codexResult,
+    }
+
+    await fs.writeFile(
+      path.join(runsDir, `${runId}.json`),
+      JSON.stringify(runRecord, null, 2),
+    )
+
+    updateJob(jobId, {
+      status: 'succeeded',
+      progress: 100,
+      stage: 'Scheda pronta',
+      result: normalizeGenerateResult({ runId, codexResult, shareData, files }),
+    })
+  } catch (error) {
+    updateJob(jobId, {
+      status: 'failed',
+      progress: 100,
+      stage: 'Generazione interrotta',
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Errore non previsto durante la generazione con Codex.',
+    })
+  } finally {
+    runInProgress = false
+  }
+}
+
 app.get('/api/status', async (_request, response) => {
   const codexPath = '/usr/bin/codex'
   response.json({
@@ -714,83 +845,39 @@ app.post('/api/generate', upload.array('sources', 6), async (request, response) 
     return
   }
 
-  await ensureDir(rawSourcesDir)
-  await ensureDir(sharesDir)
-  await ensureDir(runsDir)
-
   const athleteSlug = slugify(feedback.athleteName)
-  const runId = `${todayStamp()}-${athleteSlug}-${nowStamp()}`
-  const shareId = `${todayStamp()}-${athleteSlug}-${Date.now()}`
-  const shareRelativePath = path.relative(repoRoot, path.join(sharesDir, `${shareId}.json`))
-
+  const jobId = `${todayStamp()}-${athleteSlug}-${Date.now()}`
+  jobs.set(jobId, {
+    jobId,
+    status: 'queued',
+    progress: 3,
+    stage: 'Generazione accodata',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  })
   runInProgress = true
 
-  try {
-    const relevantWikiPaths = await collectRelevantWikiPaths(feedback.athleteName)
-    const uploadedSourcePaths = [
-      ...(await saveUploadedSources(files, athleteSlug)),
-      ...(await saveDriveSources(Array.isArray(driveSources) ? driveSources : [], athleteSlug)),
-    ]
-    const checkinSourcePath = await saveCheckinSource(
-      feedback,
-      uploadedSourcePaths,
-      athleteSlug,
-    )
+  response.status(202).json({
+    jobId,
+    status: 'queued',
+    statusUrl: `/api/jobs/${jobId}`,
+  })
 
-    const prompt = buildPrompt({
-      feedback,
-      uploadedSourcePaths,
-      checkinSourcePath,
-      relevantWikiPaths,
-      shareRelativePath,
-      shareId,
-    })
+  setImmediate(() => {
+    processGenerationJob({ jobId, files, driveSources, feedback })
+  })
+})
 
-    const codexResult = await runCodex(prompt, runId)
-    const shareFullPath = path.join(repoRoot, codexResult.share_path)
-    const shareData = JSON.parse(await fs.readFile(shareFullPath, 'utf8'))
+app.get('/api/jobs/:jobId', (request, response) => {
+  const jobId = request.params.jobId
+  const job = jobs.get(jobId)
 
-    const runRecord = {
-      runId,
-      feedback,
-      uploadedSourcePaths,
-      checkinSourcePath,
-      codexResult,
-    }
-
-    await fs.writeFile(
-      path.join(runsDir, `${runId}.json`),
-      JSON.stringify(runRecord, null, 2),
-    )
-
-    response.json({
-      runId,
-      summary: codexResult.summary,
-      athleteName: codexResult.athlete_name,
-      programTitle: codexResult.program_title,
-      rawSourcePaths: codexResult.raw_source_paths,
-      sourceNotePaths: codexResult.source_note_paths,
-      analysisPath: codexResult.analysis_path,
-      programPath: codexResult.program_path,
-      shareId: codexResult.share_id,
-      sharePath: codexResult.share_path,
-      updatedPaths: codexResult.updated_paths,
-      uploadedFiles: files.map((file) => ({
-        name: file.originalname,
-        sizeLabel: formatSize(file.size),
-      })),
-      shareData,
-    })
-  } catch (error) {
-    response.status(500).json({
-      error:
-        error instanceof Error
-          ? error.message
-          : 'Errore non previsto durante la generazione con Codex.',
-    })
-  } finally {
-    runInProgress = false
+  if (!job) {
+    response.status(404).json({ error: 'Job non trovato.' })
+    return
   }
+
+  response.json(job)
 })
 
 if (await pathExists(distDir)) {

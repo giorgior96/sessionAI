@@ -70,6 +70,21 @@ export interface GenerateResponse {
   shareData: ShareArtifact
 }
 
+export interface GenerateJobResponse {
+  jobId: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  statusUrl?: string
+}
+
+export interface GenerateJobStatus extends GenerateJobResponse {
+  progress: number
+  stage: string
+  createdAt: string
+  updatedAt: string
+  result?: GenerateResponse
+  error?: string
+}
+
 export interface StatusResponse {
   ok: boolean
   codexAvailable: boolean

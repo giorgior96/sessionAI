@@ -32,6 +32,8 @@ import {
 import type {
   DriveSource,
   FeedbackFormState,
+  GenerateJobResponse,
+  GenerateJobStatus,
   GenerateResponse,
   ShareArtifact,
   StatusResponse,
@@ -90,6 +92,21 @@ function buildShareUrl(shareId: string) {
 
 function apiUrl(path: string) {
   return `${API_BASE_URL}${path}`
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+async function readJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+  const contentType = response.headers.get('content-type') ?? ''
+
+  if (contentType.includes('application/json')) {
+    return response.json() as Promise<T>
+  }
+
+  const text = await response.text()
+  throw new Error(text.trim() || fallbackMessage)
 }
 
 function formatDate(value: string) {
@@ -659,7 +676,9 @@ function TrainerPage() {
 
   useEffect(() => {
     fetch(apiUrl('/api/status'))
-      .then((response) => response.json())
+      .then((response) =>
+        readJsonResponse<StatusResponse>(response, 'Status backend non disponibile.'),
+      )
       .then(setStatus)
       .catch(() => setStatus(null))
   }, [])
@@ -840,11 +859,52 @@ function TrainerPage() {
         method: 'POST',
         body: formData,
       })
-      setGenerationProgress(92)
-      setGenerationStage('Codex sta finalizzando programma e link atleta')
-      const payload = (await response.json()) as GenerateResponse & { error?: string }
+      const payload = await readJsonResponse<(GenerateJobResponse | GenerateResponse) & { error?: string }>(
+        response,
+        'Generazione non riuscita.',
+      )
       if (!response.ok) throw new Error(payload.error || 'Generazione non riuscita.')
-      setResult(payload)
+
+      if ('shareId' in payload) {
+        setResult(payload)
+        setGenerationProgress(100)
+        setGenerationStage('Scheda pronta')
+        setMessage('Scheda generata e pronta per la vista atleta.')
+        return
+      }
+
+      if (!('jobId' in payload) || !payload.jobId) {
+        throw new Error('Il backend non ha restituito un job di generazione.')
+      }
+
+      setGenerationProgress(62)
+      setGenerationStage('Generazione avviata sulla VPS')
+
+      for (;;) {
+        await sleep(3000)
+        const jobResponse = await fetch(apiUrl(`/api/jobs/${payload.jobId}`))
+        const job = await readJsonResponse<GenerateJobStatus>(
+          jobResponse,
+          'Stato generazione non disponibile.',
+        )
+
+        if (!jobResponse.ok) {
+          throw new Error(job.error || 'Stato generazione non disponibile.')
+        }
+
+        setGenerationProgress(Math.max(62, Math.min(100, job.progress || 62)))
+        setGenerationStage(job.stage || 'Codex sta lavorando sulla scheda')
+
+        if (job.status === 'succeeded' && job.result) {
+          setResult(job.result)
+          break
+        }
+
+        if (job.status === 'failed') {
+          throw new Error(job.error || 'Generazione non riuscita.')
+        }
+      }
+
       setGenerationProgress(100)
       setGenerationStage('Scheda pronta')
       setMessage('Scheda generata e pronta per la vista atleta.')
@@ -1338,7 +1398,7 @@ function AthletePage() {
     fetch(apiUrl(`/api/share/${shareId}`))
       .then((response) => {
         if (!response.ok) throw new Error('Share non trovato')
-        return response.json()
+        return readJsonResponse<ShareArtifact>(response, 'Share non trovato')
       })
       .then(setShare)
       .catch(() => {
