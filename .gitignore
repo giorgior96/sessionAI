@@ -11,8 +11,15 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
 data/shares/*.json
 data/runs/*.json
+raw/sources/*
+!raw/sources/.gitkeep
+wiki/athletes/*
+wiki/sources/*
+wiki/programs/*
+wiki/analyses/*
 uploads-temp
 
 # Editor directories and files

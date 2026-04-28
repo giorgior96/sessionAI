@@ -1,76 +1,70 @@
-# Coach MVP backed by knowledge
+# SessionAI
 
-Questo MVP non genera la scheda con logiche finte nel frontend.
+Trainer workspace for generating athlete programs from Google Drive sheets, coach feedback, and a Codex-maintained local wiki.
 
-La UI e' solo il layer operativo sopra il repository `knowledge`:
+## Flow
 
-1. il coach carica nuove fonti
-2. i file vengono salvati in `raw/sources/`
-3. il feedback del coach diventa una nuova fonte grezza
-4. il backend lancia `codex exec` nel repository
-5. Codex segue `AGENTS.md` e aggiorna il wiki reale
-6. viene creato anche un file share JSON per la vista atleta mobile
-
-## Cosa aggiorna davvero
-
-Durante una run riuscita, il workflow aggiorna il repository principale:
-
-- `raw/sources/` con le nuove fonti caricate
-- `wiki/sources/`
-- `wiki/meta/athlete-profile.md`
-- `wiki/analyses/`
-- `wiki/programs/`
-- `wiki/index.md`
-- `wiki/log.md`
+1. The trainer logs in with Google Drive.
+2. The app imports an athletes folder.
+3. Each athlete folder exposes previous sheets and sheet previews.
+4. Google Sheets are converted into UI tables, including cell notes and available Drive comments.
+5. The trainer adds free-form goals and feedback.
+6. The backend saves sources in `raw/sources/` and runs `codex exec`.
+7. Codex updates the internal wiki and writes a mobile share JSON for the athlete view.
 
 ## Stack
 
-- frontend: React + Vite
-- backend locale: Express
-- motore: `codex exec` lanciato localmente
-- storage: file system locale del repository
+- React + Vite frontend
+- Express backend
+- Google Drive / Sheets APIs
+- Codex CLI for generation
+- File-system wiki in `wiki/`
 
-## Avvio sviluppo
+## Development
 
 ```bash
 npm install
 npm run dev
 ```
 
-Questo avvia:
+Frontend: `http://localhost:5173`
 
-- frontend Vite
-- backend locale su `http://localhost:8787`
+Backend: `http://localhost:8787`
+
+## Environment
+
+Create `.env`:
+
+```bash
+VITE_GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
+```
+
+Optional backend model override:
+
+```bash
+COACH_MVP_CODEX_MODEL=gpt-5.4-mini
+```
 
 ## Build
 
 ```bash
 npm run build
-```
-
-Per avviare solo il backend:
-
-```bash
 npm run start
 ```
 
-## Endpoint principali
+## API
 
 - `GET /api/status`
 - `POST /api/generate`
 - `GET /api/share/:shareId`
 
-## Note MVP
+## Generated Data
 
-- serve `codex` CLI disponibile e funzionante in locale
-- il backend usa il repository vero come memoria e superficie di scrittura
-- la vista atleta legge un artefatto JSON derivato dal programma generato
-- i file in `coach-mvp/data/shares/` e `coach-mvp/data/runs/` sono artefatti locali e non fanno parte del wiki canonico
-- di default le run UI usano `gpt-5.4-mini`; puoi cambiare modello con `COACH_MVP_CODEX_MODEL`
+Private/generated athlete data is intentionally ignored:
 
-## Limiti attuali
+- `raw/sources/`
+- `data/runs/*.json`
+- `data/shares/*.json`
+- athlete-specific wiki output under `wiki/athletes/`, `wiki/sources/`, `wiki/programs/`, and `wiki/analyses/`
 
-- una run alla volta
-- nessuna autenticazione
-- nessun multi-athlete strutturato lato UI
-- la robustezza del risultato dipende dalla qualita' delle fonti caricate e dallo stato corrente del wiki
+The backend creates missing wiki structure on startup.

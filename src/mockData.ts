@@ -1,4 +1,4 @@
-import type { ShareArtifact, GenerateResponse } from './types'
+import type { ShareArtifact, GenerateResponse, TrainerAthlete } from './types'
 
 export const mockShareArtifact: ShareArtifact = {
   "shareId": "2026-04-08-luca-stucchi-hspu-priority-block-v1",
@@ -213,3 +213,57 @@ export const mockGenerateResponse: GenerateResponse = {
   uploadedFiles: [{ name: "2026-04-08-luca-stucchi-hspu-priority-block-v1 (1).pdf", sizeLabel: "1.2 MB" }],
   shareData: mockShareArtifact
 }
+
+export const mockTrainerAthletes: TrainerAthlete[] = [
+  {
+    id: 'luca-stucchi',
+    name: 'Luca Stucchi',
+    goal: 'HSPU priority + front lever maintenance',
+    lastUpdated: '2026-04-08T09:00:00.000Z',
+    notes: [
+      'Blocco precedente centrato su HSPU con mantenimento leve.',
+      'Serve monitoraggio video su prima e ultima serie degli esercizi chiave.',
+    ],
+    sources: [
+      {
+        id: 'local-luca-hspu-v1',
+        name: '2026-04-08-luca-stucchi-hspu-priority-block-v1.xlsx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        modifiedTime: '2026-04-08T09:00:00.000Z',
+        sizeLabel: 'Google Sheet',
+        athleteName: 'Luca Stucchi',
+        extension: '.xlsx',
+      },
+      {
+        id: 'local-luca-checkin',
+        name: 'luca-stucchi-checkin-video-feedback.pdf',
+        mimeType: 'application/pdf',
+        modifiedTime: '2026-04-10T09:00:00.000Z',
+        sizeLabel: '1.2 MB',
+        athleteName: 'Luca Stucchi',
+        extension: '.pdf',
+      },
+    ],
+  },
+  {
+    id: 'martina-rossi',
+    name: 'Martina Rossi',
+    goal: 'Ipertrofia calisthenics',
+    lastUpdated: '2026-04-02T09:00:00.000Z',
+    notes: [
+      'Progressione su dip e trazioni zavorrate.',
+      'Volume da dosare per recupero spalle.',
+    ],
+    sources: [
+      {
+        id: 'local-martina-volume',
+        name: '2026-04-02-martina-rossi-volume-block.xlsx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        modifiedTime: '2026-04-02T09:00:00.000Z',
+        sizeLabel: 'Google Sheet',
+        athleteName: 'Martina Rossi',
+        extension: '.xlsx',
+      },
+    ],
+  },
+]

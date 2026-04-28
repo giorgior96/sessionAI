@@ -1,9 +1,7 @@
-export type GoalKey = 'mixed' | 'hspu' | 'front-lever' | 'hypertrophy'
-
 export interface FeedbackFormState {
   athleteName: string
   coachName: string
-  primaryGoal: GoalKey
+  primaryGoal: string
   trainingDays: number
   energy: 'high' | 'steady' | 'low'
   recovery: 'high' | 'steady' | 'low'
@@ -78,4 +76,32 @@ export interface StatusResponse {
   codexModel: string
   repoRoot: string
   rawSourcesDir: string
+  googleDriveConfigured: boolean
+}
+
+export interface DriveSource {
+  id: string
+  name: string
+  mimeType: string
+  modifiedTime?: string
+  sizeLabel: string
+  athleteName: string
+  extension?: string
+  downloadUrl?: string
+}
+
+export interface TrainerAthlete {
+  id: string
+  name: string
+  goal: string
+  lastUpdated: string
+  sources: DriveSource[]
+  notes: string[]
+}
+
+export interface DriveImportResponse {
+  folderId: string
+  importedAt: string
+  fileCount: number
+  athletes: TrainerAthlete[]
 }
