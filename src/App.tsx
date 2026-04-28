@@ -42,6 +42,7 @@ import type {
 const GOOGLE_SCOPES =
   'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly'
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? ''
 const DEFAULT_DRIVE_FOLDER_URL =
   'https://drive.google.com/drive/u/2/folders/1P3ino0yF5bivKpc1ihjf5FXDuK_ZpkgU'
 
@@ -85,6 +86,10 @@ type SheetPreview = {
 
 function buildShareUrl(shareId: string) {
   return `${window.location.origin}${window.location.pathname}#/share/${shareId}`
+}
+
+function apiUrl(path: string) {
+  return `${API_BASE_URL}${path}`
 }
 
 function formatDate(value: string) {
@@ -653,7 +658,7 @@ function TrainerPage() {
   )
 
   useEffect(() => {
-    fetch('/api/status')
+    fetch(apiUrl('/api/status'))
       .then((response) => response.json())
       .then(setStatus)
       .catch(() => setStatus(null))
@@ -831,7 +836,7 @@ function TrainerPage() {
 
       setGenerationProgress(58)
       setGenerationStage('Invio fonti al backend')
-      const response = await fetch('/api/generate', {
+      const response = await fetch(apiUrl('/api/generate'), {
         method: 'POST',
         body: formData,
       })
@@ -1330,7 +1335,7 @@ function AthletePage() {
   const [feedbackMap, setFeedbackMap] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    fetch(`/api/share/${shareId}`)
+    fetch(apiUrl(`/api/share/${shareId}`))
       .then((response) => {
         if (!response.ok) throw new Error('Share non trovato')
         return response.json()
