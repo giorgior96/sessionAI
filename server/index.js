@@ -526,7 +526,7 @@ async function runCodex(prompt, runId) {
         '-C',
         repoRoot,
         '-s',
-        'workspace-write',
+        'danger-full-access',
         '-c',
         'approval_policy="never"',
         '--output-schema',
@@ -732,6 +732,11 @@ async function processGenerationJob({ jobId, files, driveSources, feedback }) {
     })
 
     const shareFullPath = path.join(repoRoot, codexResult.share_path)
+    if (!(await pathExists(shareFullPath))) {
+      throw new Error(
+        `Codex non ha creato il file share richiesto: ${codexResult.share_path}.`,
+      )
+    }
     const shareData = JSON.parse(await fs.readFile(shareFullPath, 'utf8'))
 
     const runRecord = {
