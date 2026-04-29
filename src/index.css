@@ -144,7 +144,14 @@ p { margin: 0; }
   padding: 32px 0 80px;
 }
 
-.trainer-topbar {
+.review-page-shell {
+  width: min(1720px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 32px 0 80px;
+}
+
+.trainer-topbar,
+.review-topbar {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -152,7 +159,8 @@ p { margin: 0; }
   margin-bottom: 28px;
 }
 
-.trainer-topbar h1 {
+.trainer-topbar h1,
+.review-topbar h1 {
   font-size: clamp(3rem, 6vw, 5.8rem);
 }
 
@@ -1400,7 +1408,13 @@ p { margin: 0; }
     padding-top: 16px;
   }
 
+  .review-page-shell {
+    width: min(100%, calc(100vw - 16px));
+    padding-top: 16px;
+  }
+
   .trainer-topbar,
+  .review-topbar,
   .athlete-summary,
   .result-panel,
   .review-hero,

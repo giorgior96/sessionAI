@@ -25,7 +25,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react'
-import { Link, Route, Routes, useParams } from 'react-router-dom'
+import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import {
   mockGenerateResponse,
   mockShareArtifact,
@@ -918,6 +918,7 @@ function RestTimer({
 }
 
 function TrainerPage() {
+  const navigate = useNavigate()
   const [status, setStatus] = useState<StatusResponse | null>(null)
   const tokenClientRef = useRef<any>(null)
   const [accessToken, setAccessToken] = useState('')
@@ -935,9 +936,6 @@ function TrainerPage() {
   const [previewLoadingId, setPreviewLoadingId] = useState('')
   const [generationProgress, setGenerationProgress] = useState(0)
   const [generationStage, setGenerationStage] = useState('')
-  const [draftShare, setDraftShare] = useState<ShareArtifact | null>(null)
-  const [shareApproved, setShareApproved] = useState(false)
-  const [savingShare, setSavingShare] = useState(false)
   const [contextMap, setContextMap] = useState<Record<string, AthleteContextSummary>>({})
   const [preparingContext, setPreparingContext] = useState(false)
   const [contextProgress, setContextProgress] = useState(0)
@@ -999,8 +997,6 @@ function TrainerPage() {
     if (!selectedAthlete) return
     setFeedback(buildInitialFeedback(selectedAthlete))
     setResult(null)
-    setDraftShare(null)
-    setShareApproved(false)
     setLocalSources([])
     setSheetPreview(null)
     setActivePreviewSheet(0)
@@ -1068,54 +1064,6 @@ function TrainerPage() {
       setError(importError instanceof Error ? importError.message : 'Errore import Drive.')
     } finally {
       setImporting(false)
-    }
-  }
-
-  async function copyShareUrl() {
-    if (!result) return
-    try {
-      await navigator.clipboard.writeText(buildShareUrl(result.shareId))
-      setMessage('Link atleta copiato negli appunti.')
-      setTimeout(() => setMessage(''), 3000)
-    } catch {
-      setMessage('Non riesco a copiare il link.')
-    }
-  }
-
-  async function approveShareDraft() {
-    if (!draftShare || !result) return
-
-    setError('')
-    setMessage('')
-    setSavingShare(true)
-
-    try {
-      const response = await fetch(apiUrl(`/api/share/${draftShare.shareId}`), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draftShare),
-      })
-      const savedShare = await readJsonResponse<ShareArtifact & { error?: string }>(
-        response,
-        'Salvataggio scheda non riuscito.',
-      )
-
-      if (!response.ok) {
-        throw new Error(savedShare.error || 'Salvataggio scheda non riuscito.')
-      }
-
-      setDraftShare(savedShare)
-      setResult({ ...result, shareData: savedShare, programTitle: savedShare.programTitle })
-      setShareApproved(true)
-      setMessage('Scheda convalidata. Ora puoi condividere il link atleta.')
-    } catch (approveError) {
-      setError(
-        approveError instanceof Error
-          ? approveError.message
-          : 'Non riesco a pubblicare la scheda.',
-      )
-    } finally {
-      setSavingShare(false)
     }
   }
 
@@ -1255,8 +1203,6 @@ function TrainerPage() {
     setMessage('')
     setGenerating(true)
     setResult(null)
-    setDraftShare(null)
-    setShareApproved(false)
     setGenerationProgress(0)
     setGenerationStage('Preparazione input')
 
@@ -1313,11 +1259,10 @@ function TrainerPage() {
 
       if ('shareId' in payload) {
         setResult(payload)
-        setDraftShare(payload.shareData)
-        setShareApproved(false)
         setGenerationProgress(100)
-        setGenerationStage('Bozza pronta per revisione coach')
-        setMessage('Bozza generata. Controllala e convalidala prima di condividerla.')
+        setGenerationStage('Apro revisione coach')
+        setMessage('Bozza generata. Apro la pagina di revisione.')
+        navigate(`/review/${payload.shareId}`)
         return
       }
 
@@ -1345,8 +1290,7 @@ function TrainerPage() {
 
         if (job.status === 'succeeded' && job.result && 'shareData' in job.result) {
           setResult(job.result)
-          setDraftShare(job.result.shareData)
-          setShareApproved(false)
+          navigate(`/review/${job.result.shareId}`)
           break
         }
 
@@ -1356,8 +1300,8 @@ function TrainerPage() {
       }
 
       setGenerationProgress(100)
-      setGenerationStage('Bozza pronta per revisione coach')
-      setMessage('Bozza generata. Controllala e convalidala prima di condividerla.')
+      setGenerationStage('Apro revisione coach')
+      setMessage('Bozza generata. Apro la pagina di revisione.')
     } catch (generateError) {
       setError(
         generateError instanceof Error
@@ -1843,50 +1787,170 @@ function TrainerPage() {
               )}
           </section>
 
-          {result && draftShare && (
-            <>
-              <ProgramReviewEditor
-                draft={draftShare}
-                approved={shareApproved}
-                saving={savingShare}
-                onChange={(nextDraft) => {
-                  setDraftShare(nextDraft)
-                  setShareApproved(false)
-                }}
-                onApprove={approveShareDraft}
-              />
-
-              <section className={`result-panel ${shareApproved ? 'is-share-ready' : ''}`}>
-                <div>
-                  <p className="panel-kicker">Condivisione atleta</p>
-                  <h2>{shareApproved ? 'Link pronto' : 'In attesa di convalida'}</h2>
-                  <p className="hero-copy">
-                    {shareApproved
-                      ? 'La versione approvata e salvata e disponibile per l’allievo.'
-                      : 'Prima controlla e pubblica la bozza coach. Il link resta nascosto fino alla convalida.'}
-                  </p>
-                </div>
-                <div className="result-actions">
-                  <button className="ghost-button" onClick={copyShareUrl} disabled={!shareApproved}>
-                    <Copy size={18} />
-                    Copia link
-                  </button>
-                  <Link
-                    className={`primary-button ${!shareApproved ? 'is-disabled-link' : ''}`}
-                    to={shareApproved ? `/share/${result.shareId}` : '#'}
-                    onClick={(event) => {
-                      if (!shareApproved) event.preventDefault()
-                    }}
-                  >
-                    Apri vista atleta
-                    <ExternalLink size={18} />
-                  </Link>
-                </div>
-              </section>
-            </>
+          {result && (
+            <section className="result-panel">
+              <div>
+                <p className="panel-kicker">Bozza generata</p>
+                <h2>{result.programTitle}</h2>
+                <p className="hero-copy">
+                  Apri la pagina dedicata per controllare, modificare e pubblicare la scheda.
+                </p>
+              </div>
+              <div className="result-actions">
+                <Link className="primary-button" to={`/review/${result.shareId}`}>
+                  Apri revisione coach
+                  <ExternalLink size={18} />
+                </Link>
+              </div>
+            </section>
           )}
         </section>
       </section>
+    </main>
+  )
+}
+
+function ReviewPage() {
+  const { shareId = '' } = useParams()
+  const [draftShare, setDraftShare] = useState<ShareArtifact | null>(null)
+  const [shareApproved, setShareApproved] = useState(false)
+  const [savingShare, setSavingShare] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    setError('')
+    setMessage('')
+    setShareApproved(false)
+    fetch(apiUrl(`/api/share/${shareId}`))
+      .then((response) => {
+        if (!response.ok) throw new Error('Bozza non trovata')
+        return readJsonResponse<ShareArtifact>(response, 'Bozza non trovata')
+      })
+      .then(setDraftShare)
+      .catch((reviewError) => {
+        setError(
+          reviewError instanceof Error
+            ? reviewError.message
+            : 'Non riesco ad aprire la bozza.',
+        )
+      })
+  }, [shareId])
+
+  async function copyAthleteUrl() {
+    if (!draftShare) return
+    try {
+      await navigator.clipboard.writeText(buildShareUrl(draftShare.shareId))
+      setMessage('Link atleta copiato negli appunti.')
+      window.setTimeout(() => setMessage(''), 3000)
+    } catch {
+      setMessage('Non riesco a copiare il link.')
+    }
+  }
+
+  async function approveShareDraft() {
+    if (!draftShare) return
+
+    setError('')
+    setMessage('')
+    setSavingShare(true)
+
+    try {
+      const response = await fetch(apiUrl(`/api/share/${draftShare.shareId}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draftShare),
+      })
+      const savedShare = await readJsonResponse<ShareArtifact & { error?: string }>(
+        response,
+        'Salvataggio scheda non riuscito.',
+      )
+
+      if (!response.ok) {
+        throw new Error(savedShare.error || 'Salvataggio scheda non riuscito.')
+      }
+
+      setDraftShare(savedShare)
+      setShareApproved(true)
+      setMessage('Scheda convalidata. Ora puoi condividere il link atleta.')
+    } catch (approveError) {
+      setError(
+        approveError instanceof Error
+          ? approveError.message
+          : 'Non riesco a pubblicare la scheda.',
+      )
+    } finally {
+      setSavingShare(false)
+    }
+  }
+
+  return (
+    <main className="review-page-shell">
+      <header className="review-topbar">
+        <div>
+          <p className="eyebrow">Revisione coach</p>
+          <h1>Bozza scheda</h1>
+        </div>
+        <Link className="ghost-button" to="/">
+          Centro schede
+        </Link>
+      </header>
+
+      {(error || message) && (
+        <div className={`notice-row ${error ? 'is-error' : 'is-success'}`}>
+          {error ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+          {error || message}
+        </div>
+      )}
+
+      {draftShare ? (
+        <>
+          <ProgramReviewEditor
+            draft={draftShare}
+            approved={shareApproved}
+            saving={savingShare}
+            onChange={(nextDraft) => {
+              setDraftShare(nextDraft)
+              setShareApproved(false)
+            }}
+            onApprove={approveShareDraft}
+          />
+
+          <section className={`result-panel ${shareApproved ? 'is-share-ready' : ''}`}>
+            <div>
+              <p className="panel-kicker">Condivisione atleta</p>
+              <h2>{shareApproved ? 'Link pronto' : 'In attesa di convalida'}</h2>
+              <p className="hero-copy">
+                {shareApproved
+                  ? 'La versione approvata e salvata e disponibile per l’allievo.'
+                  : 'Pubblica la bozza dopo le modifiche. Il link si usa solo quando la convalida e completata.'}
+              </p>
+            </div>
+            <div className="result-actions">
+              <button className="ghost-button" onClick={copyAthleteUrl} disabled={!shareApproved}>
+                <Copy size={18} />
+                Copia link
+              </button>
+              <Link
+                className={`primary-button ${!shareApproved ? 'is-disabled-link' : ''}`}
+                to={shareApproved ? `/share/${draftShare.shareId}` : '#'}
+                onClick={(event) => {
+                  if (!shareApproved) event.preventDefault()
+                }}
+              >
+                Apri vista atleta
+                <ExternalLink size={18} />
+              </Link>
+            </div>
+          </section>
+        </>
+      ) : (
+        <section className="empty-state-panel">
+          <LoaderCircle className="spin" size={28} />
+          <h2>Carico bozza</h2>
+          <p className="hero-copy">Sto aprendo la scheda generata per la revisione.</p>
+        </section>
+      )}
     </main>
   )
 }
@@ -2129,6 +2193,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<TrainerPage />} />
+      <Route path="/review/:shareId" element={<ReviewPage />} />
       <Route path="/share/:shareId" element={<AthletePage />} />
     </Routes>
   )
