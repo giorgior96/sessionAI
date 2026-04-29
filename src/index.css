@@ -744,10 +744,9 @@ p { margin: 0; }
   border-radius: 0.85rem;
 }
 
-.context-prep-box {
+.evidence-mini-box {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
   gap: 14px;
   margin-top: 16px;
   padding: 14px;
@@ -756,16 +755,16 @@ p { margin: 0; }
   border: 1px solid var(--line-strong);
 }
 
-.context-prep-box strong,
-.context-prep-box span {
+.evidence-mini-box strong,
+.evidence-mini-box span {
   display: block;
 }
 
-.context-prep-box strong {
+.evidence-mini-box strong {
   font-size: 0.9rem;
 }
 
-.context-prep-box span {
+.evidence-mini-box span {
   margin-top: 3px;
   color: var(--muted);
   font-size: 0.82rem;
@@ -1471,7 +1470,7 @@ p { margin: 0; }
   .summary-metrics,
   .result-actions,
   .timer-actions,
-  .context-prep-box {
+  .evidence-mini-box {
     flex-direction: column;
     align-items: stretch;
   }

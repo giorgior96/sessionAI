@@ -1,6 +1,7 @@
 import cors from 'cors'
 import express from 'express'
 import multer from 'multer'
+import * as XLSX from 'xlsx'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
@@ -16,7 +17,6 @@ const dataDir = path.join(appRoot, 'data')
 const sharesDir = path.join(dataDir, 'shares')
 const runsDir = path.join(dataDir, 'runs')
 const driveCacheDir = path.join(dataDir, 'drive-cache')
-const athleteContextsDir = path.join(dataDir, 'athlete-contexts')
 const upload = multer({ storage: multer.memoryStorage() })
 const app = express()
 const port = Number(process.env.PORT ?? 8787)
@@ -64,29 +64,94 @@ const outputSchema = {
   },
 }
 
-const contextOutputSchema = {
+const directGenerationSchema = {
   type: 'object',
   additionalProperties: false,
   required: [
     'summary',
     'athlete_name',
-    'context_path',
-    'profile_path',
-    'latest_state_path',
-    'source_paths',
-    'updated_paths',
+    'program_title',
+    'scientific_rationale',
+    'share_data',
   ],
   properties: {
     summary: { type: 'string' },
     athlete_name: { type: 'string' },
-    context_path: { type: 'string' },
-    profile_path: { type: 'string' },
-    latest_state_path: { type: 'string' },
-    source_paths: {
+    program_title: { type: 'string' },
+    scientific_rationale: { type: 'string' },
+    share_data: {
+      type: 'object',
+      additionalProperties: true,
+      required: [
+        'shareId',
+        'athleteName',
+        'coachName',
+        'programTitle',
+        'programPath',
+        'analysisPath',
+        'generatedAt',
+        'weekLabel',
+        'overview',
+        'sessions',
+      ],
+      properties: {
+        shareId: { type: 'string' },
+        athleteName: { type: 'string' },
+        coachName: { type: 'string' },
+        programTitle: { type: 'string' },
+        programPath: { type: 'string' },
+        analysisPath: { type: 'string' },
+        generatedAt: { type: 'string' },
+        weekLabel: { type: 'string' },
+        overview: { type: 'string' },
+        sessions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'title', 'focus', 'notes', 'exercises'],
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              focus: { type: 'string' },
+              notes: { type: 'string' },
+              exercises: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: true,
+                  required: [
+                    'id',
+                    'block',
+                    'name',
+                    'prescription',
+                    'restSeconds',
+                    'notes',
+                    'filmPrompt',
+                    'cameraSuggested',
+                  ],
+                  properties: {
+                    id: { type: 'string' },
+                    block: { type: 'string' },
+                    name: { type: 'string' },
+                    prescription: { type: 'string' },
+                    restSeconds: { type: 'number' },
+                    notes: { type: 'string' },
+                    filmPrompt: { type: 'string' },
+                    cameraSuggested: { type: 'boolean' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    evidence_used: {
       type: 'array',
       items: { type: 'string' },
     },
-    updated_paths: {
+    assumptions: {
       type: 'array',
       items: { type: 'string' },
     },
@@ -434,6 +499,132 @@ async function collectRelevantWikiPaths(athleteName) {
   return [...basePaths, ...scored.slice(0, 8).map((entry) => entry.relativePath)]
 }
 
+function compactText(value, maxLength = 14000) {
+  const text = String(value || '').replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  return text.length > maxLength ? `${text.slice(0, maxLength)}\n...[troncato]` : text
+}
+
+function rowsToText(rows, limit = 80) {
+  return rows
+    .slice(0, limit)
+    .map((row) => row.map((cell) => String(cell ?? '').trim()).filter(Boolean).join(' | '))
+    .filter(Boolean)
+    .join('\n')
+}
+
+function extractWorkbookText(file) {
+  const workbook = XLSX.read(file.buffer, { type: 'buffer' })
+  return workbook.SheetNames.map((sheetName) => {
+    const worksheet = workbook.Sheets[sheetName]
+    const rows = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      blankrows: false,
+      defval: '',
+    })
+    return `## Foglio: ${sheetName}\n${rowsToText(rows)}`
+  }).join('\n\n')
+}
+
+function extractFileText(file) {
+  const extension = path.extname(file.originalname).toLowerCase()
+  if (['.xlsx', '.xls', '.xlsm'].includes(extension)) {
+    return extractWorkbookText(file)
+  }
+
+  if (['.md', '.txt', '.csv', '.json'].includes(extension)) {
+    return file.buffer.toString('utf8')
+  }
+
+  return ''
+}
+
+function extractExerciseCandidates(text) {
+  const ignored = new Set([
+    'serie',
+    'reps',
+    'recupero',
+    'note',
+    'giorno',
+    'day',
+    'warm',
+    'main',
+    'accessory',
+    'core',
+    'settimana',
+    'foglio',
+  ])
+  const counts = new Map()
+  const patterns = [
+    /front\s+[a-z ]{2,28}/gi,
+    /planche\s+[a-z ]{2,28}/gi,
+    /handstand\s+[a-z ]{2,28}/gi,
+    /hspu/gi,
+    /muscle[- ]?up/gi,
+    /pull[- ]?up|trazion[ei]/gi,
+    /dip[s]?/gi,
+    /push[- ]?up|piegament[oi]/gi,
+    /row|remator[ei]/gi,
+    /dragon\s+flag|hollow|arch/gi,
+  ]
+
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const name = match[0].toLowerCase().replace(/\s+/g, ' ').trim()
+      if (name.length < 3 || ignored.has(name)) continue
+      counts.set(name, (counts.get(name) ?? 0) + 1)
+    }
+  }
+
+  return Array.from(counts.entries())
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 18)
+    .map(([name, count]) => ({ name, count }))
+}
+
+function buildAthleteSummary({ files, feedback }) {
+  const extractedSources = files.map((file) => {
+    const text = compactText(extractFileText(file), 9000)
+    return {
+      name: file.originalname,
+      sizeLabel: formatSize(file.size),
+      text,
+    }
+  })
+  const combinedText = extractedSources.map((source) => source.text).join('\n\n')
+
+  return {
+    athleteName: feedback.athleteName,
+    sourceCount: files.length,
+    sources: extractedSources.map((source) => ({
+      name: source.name,
+      sizeLabel: source.sizeLabel,
+      excerpt: source.text.slice(0, 3500),
+    })),
+    frequentExerciseSignals: extractExerciseCandidates(combinedText),
+    latestSheetExcerpt: extractedSources.at(-1)?.text.slice(0, 6000) ?? '',
+    notesAndProgressionsExcerpt: compactText(
+      extractedSources
+        .filter((source) => /commenti|progressioni|nota|note/i.test(source.name + source.text))
+        .map((source) => `# ${source.name}\n${source.text}`)
+        .join('\n\n'),
+      9000,
+    ),
+  }
+}
+
+async function loadEvidencePack(sciencePaths) {
+  const packs = []
+  for (const sciencePath of sciencePaths) {
+    const fullPath = path.join(repoRoot, sciencePath)
+    if (!(await pathExists(fullPath))) continue
+    packs.push({
+      path: sciencePath,
+      content: compactText(await fs.readFile(fullPath, 'utf8'), 5500),
+    })
+  }
+  return packs
+}
+
 function buildCheckinSource({ feedback, uploadedSources, checkinRelativePath }) {
   const lines = [
     `# Coach App Check-In | ${feedback.athleteName}`,
@@ -712,6 +903,75 @@ Alla fine restituisci SOLO un JSON valido secondo lo schema fornito dal chiamant
 `.trim()
 }
 
+function buildDirectGenerationPrompt({
+  feedback,
+  athleteSummary,
+  evidencePack,
+  shareId,
+}) {
+  const coachContext = JSON.stringify(
+    {
+      athleteName: feedback.athleteName,
+      coachName: feedback.coachName,
+      primaryGoal: feedback.primaryGoal,
+      trainingDays: Number(feedback.trainingDays),
+      energy: feedback.energy,
+      recovery: feedback.recovery,
+      adherence: feedback.adherence,
+      pain: feedback.pain,
+      topLimitation: feedback.topLimitation,
+      feedbackNotes: feedback.feedbackNotes,
+      filmingReminder: feedback.filmingReminder === 'true',
+    },
+    null,
+    2,
+  )
+
+  return `
+Sei SessionAI, generatore evidence-based di schede calisthenics.
+
+Obiettivo: produrre una BOZZA coach in JSON, veloce e revisionabile.
+
+Regole dure:
+- Usa solo atleta, storico e feedback qui sotto.
+- Non usare dati di altri atleti.
+- Non fare ricerca web.
+- Non aggiornare file, wiki o repository.
+- Applica esplicitamente gli evidence pack forniti.
+- Output SOLO JSON valido secondo lo schema.
+- La scheda deve essere pratica, pronta da revisionare, senza placeholder.
+
+Coach feedback:
+\`\`\`json
+${coachContext}
+\`\`\`
+
+Athlete summary estratto deterministicamente dalle schede:
+\`\`\`json
+${JSON.stringify(athleteSummary, null, 2)}
+\`\`\`
+
+Evidence pack selezionati:
+${evidencePack
+  .map((pack) => `\n---\nSOURCE: ${pack.path}\n${pack.content}`)
+  .join('\n')}
+
+Output richiesto:
+- summary: breve sintesi della logica.
+- scientific_rationale: razionale pratico, collegato agli evidence pack.
+- share_data: JSON mobile-friendly per atleta con shareId "${shareId}".
+
+Linee guida di qualità:
+- Parti dall'ultima scheda e mantieni continuita dove ha senso.
+- Cambia esercizi/progressioni solo se feedback, obiettivo o recupero lo giustificano.
+- Specifica recuperi realistici in secondi.
+- Metti skill/forza prioritaria a inizio sessione.
+- Se dolore o recupero basso: riduci aggressivita, volume o leva.
+- Se aderenza alta e recupero stabile: progressione moderata, non salto enorme.
+- Per esercizi chiave, imposta cameraSuggested true e un filmPrompt utile.
+`.trim()
+}
+
 async function runCodex(prompt, runId, schema = outputSchema) {
   const schemaPath = path.join(runsDir, `${runId}-schema.json`)
   const outputPath = path.join(runsDir, `${runId}-response.json`)
@@ -843,21 +1103,6 @@ async function saveCheckinSource(feedback, uploadedSources, athleteSlug) {
   return relativePath
 }
 
-async function getPreparedContext(athleteSlug) {
-  const contextPath = path.join(athleteContextsDir, `${athleteSlug}.json`)
-  if (!(await pathExists(contextPath))) return null
-
-  try {
-    const payload = JSON.parse(await fs.readFile(contextPath, 'utf8'))
-    if (!payload.context_path || !payload.profile_path || !payload.latest_state_path) {
-      return null
-    }
-    return payload
-  } catch {
-    return null
-  }
-}
-
 function normalizeGenerateResult({ runId, codexResult, shareData, files }) {
   return {
     runId,
@@ -876,6 +1121,28 @@ function normalizeGenerateResult({ runId, codexResult, shareData, files }) {
       sizeLabel: formatSize(file.size),
     })),
     shareData,
+  }
+}
+
+function normalizeDirectGenerateResult({ runId, codexResult, shareId, sharePath, files }) {
+  return {
+    runId,
+    summary: codexResult.summary,
+    athleteName: codexResult.athlete_name,
+    programTitle: codexResult.program_title,
+    rawSourcePaths: [],
+    sourceNotePaths: [],
+    analysisPath: '',
+    programPath: codexResult.share_data?.programPath || '',
+    shareId,
+    sharePath,
+    updatedPaths: [sharePath],
+    uploadedFiles: files.map((file) => ({
+      name: file.originalname,
+      sizeLabel: formatSize(file.size),
+    })),
+    shareData: codexResult.share_data,
+    scientificRationale: codexResult.scientific_rationale,
   }
 }
 
@@ -1027,105 +1294,12 @@ function updateJob(jobId, patch) {
   })
 }
 
-async function processContextJob({ jobId, files, athleteName }) {
-  runInProgress = true
-  updateJob(jobId, {
-    status: 'running',
-    progress: 10,
-    stage: 'Salvo schede atleta',
-  })
-
-  try {
-    await ensureKnowledgeBase()
-    await ensureDir(rawSourcesDir)
-    await ensureDir(runsDir)
-    await ensureDir(athleteContextsDir)
-
-    const athleteSlug = slugify(athleteName)
-    const runId = `${todayStamp()}-${athleteSlug}-context-${nowStamp()}`
-    const profileRelativePath = `wiki/athletes/${athleteSlug}/profile.md`
-    const latestStateRelativePath = `wiki/athletes/${athleteSlug}/latest-state.md`
-    const contextRelativePath = `data/athlete-contexts/${athleteSlug}.json`
-
-    updateJob(jobId, {
-      runId,
-      progress: 32,
-      stage: 'Codex sintetizza storico e progressioni',
-    })
-
-    const uploadedSourcePaths = await saveUploadedSources(files, athleteSlug)
-    const prompt = buildContextPrompt({
-      athleteName,
-      uploadedSourcePaths,
-      contextRelativePath,
-      profileRelativePath,
-      latestStateRelativePath,
-    })
-
-    const codexResult = await runCodex(prompt, runId, contextOutputSchema)
-
-    const contextFullPath = path.join(repoRoot, codexResult.context_path || contextRelativePath)
-    if (!(await pathExists(contextFullPath))) {
-      await ensureDir(path.dirname(contextFullPath))
-      await fs.writeFile(
-        contextFullPath,
-        JSON.stringify(
-          {
-            athlete_name: codexResult.athlete_name || athleteName,
-            summary: codexResult.summary,
-            source_paths: uploadedSourcePaths,
-            profile_path: profileRelativePath,
-            latest_state_path: latestStateRelativePath,
-            updated_at: new Date().toISOString(),
-          },
-          null,
-          2,
-        ),
-      )
-    }
-
-    const normalizedContext = {
-      ...codexResult,
-      athlete_name: codexResult.athlete_name || athleteName,
-      context_path: codexResult.context_path || contextRelativePath,
-      profile_path: codexResult.profile_path || profileRelativePath,
-      latest_state_path: codexResult.latest_state_path || latestStateRelativePath,
-      source_paths: codexResult.source_paths?.length ? codexResult.source_paths : uploadedSourcePaths,
-      updated_at: new Date().toISOString(),
-    }
-
-    await fs.writeFile(
-      path.join(athleteContextsDir, `${athleteSlug}.json`),
-      JSON.stringify(normalizedContext, null, 2),
-    )
-
-    updateJob(jobId, {
-      status: 'succeeded',
-      progress: 100,
-      stage: 'Contesto atleta pronto',
-      result: normalizedContext,
-    })
-  } catch (error) {
-    updateJob(jobId, {
-      status: 'failed',
-      progress: 100,
-      stage: 'Preparazione contesto interrotta',
-      error:
-        error instanceof Error
-          ? error.message
-          : 'Errore non previsto durante la preparazione del contesto.',
-    })
-  } finally {
-    runInProgress = false
-  }
-}
-
 async function processGenerationJob({ jobId, files, driveSources, feedback }) {
   runInProgress = true
   updateJob(jobId, {
     status: 'running',
     progress: 10,
-    stage: 'Preparo fonti e wiki atleta',
+    stage: 'Estraggo storico dalle schede',
   })
 
   try {
@@ -1136,92 +1310,56 @@ async function processGenerationJob({ jobId, files, driveSources, feedback }) {
     const athleteSlug = slugify(feedback.athleteName)
     const runId = `${todayStamp()}-${athleteSlug}-${nowStamp()}`
     const shareId = `${todayStamp()}-${athleteSlug}-${Date.now()}`
-    const shareRelativePath = path.relative(repoRoot, path.join(sharesDir, `${shareId}.json`))
-    const preparedContext = await getPreparedContext(athleteSlug)
+    const sharePath = path.relative(repoRoot, path.join(sharesDir, `${shareId}.json`))
     const sciencePaths = selectSciencePaths(feedback)
 
     updateJob(jobId, {
       runId,
       progress: 25,
-      stage: preparedContext ? 'Uso contesto atleta gia preparato' : 'Salvo schede e commenti importati',
+      stage: 'Preparo evidence pack',
     })
 
-    const uploadedSourcePaths = preparedContext
-      ? []
-      : [
-          ...(await saveUploadedSources(files, athleteSlug)),
-          ...(await saveDriveSources(Array.isArray(driveSources) ? driveSources : [], athleteSlug)),
-        ]
+    const savedSourcePaths = await saveUploadedSources(files, athleteSlug)
+    const athleteSummary = buildAthleteSummary({ files, feedback })
+    const evidencePack = await loadEvidencePack(sciencePaths)
 
     updateJob(jobId, {
-      progress: preparedContext ? 42 : 38,
-      stage: 'Creo check-in coach',
+      progress: 42,
+      stage: 'Codex genera JSON evidence-based',
     })
 
-    const checkinSourcePath = await saveCheckinSource(
+    const prompt = buildDirectGenerationPrompt({
       feedback,
-      uploadedSourcePaths,
-      athleteSlug,
-    )
-
-    const relevantWikiPaths = preparedContext
-      ? []
-      : await collectRelevantWikiPaths(feedback.athleteName)
-
-    const prompt = preparedContext
-      ? buildFastPrompt({
-          feedback,
-          checkinSourcePath,
-          contextRelativePath: preparedContext.context_path,
-          profileRelativePath: preparedContext.profile_path,
-          latestStateRelativePath: preparedContext.latest_state_path,
-          sciencePaths,
-          shareRelativePath,
-          shareId,
-        })
-      : buildPrompt({
-          feedback,
-          uploadedSourcePaths,
-          checkinSourcePath,
-          relevantWikiPaths,
-          sciencePaths,
-          shareRelativePath,
-          shareId,
-        })
-
-    updateJob(jobId, {
-      progress: preparedContext ? 62 : 48,
-      stage: preparedContext
-        ? 'Codex genera da profilo sintetico'
-        : 'Codex legge storico e fonti scientifiche',
+      athleteSummary,
+      evidencePack,
+      shareId,
     })
 
-    const codexResult = await runCodex(prompt, runId)
+    const codexResult = await runCodex(prompt, runId, directGenerationSchema)
 
     updateJob(jobId, {
       progress: 88,
-      stage: 'Creo link atleta',
+      stage: 'Salvo bozza coach',
     })
 
-    const shareFullPath = path.join(repoRoot, codexResult.share_path)
-    if (!(await pathExists(shareFullPath))) {
-      await ensureDir(path.dirname(shareFullPath))
-      await fs.writeFile(
-        shareFullPath,
-        JSON.stringify(
-          buildFallbackShareData({ shareId, feedback, codexResult }),
-          null,
-          2,
-        ),
-      )
+    const shareData = {
+      ...codexResult.share_data,
+      shareId,
+      athleteName: codexResult.share_data?.athleteName || feedback.athleteName,
+      coachName: codexResult.share_data?.coachName || feedback.coachName || 'Coach',
+      programTitle: codexResult.share_data?.programTitle || codexResult.program_title,
+      generatedAt: new Date().toISOString(),
     }
-    const shareData = JSON.parse(await fs.readFile(shareFullPath, 'utf8'))
+
+    const shareFullPath = path.join(repoRoot, sharePath)
+    await fs.writeFile(shareFullPath, JSON.stringify(shareData, null, 2))
 
     const runRecord = {
       runId,
       feedback,
-      uploadedSourcePaths,
-      checkinSourcePath,
+      savedSourcePaths,
+      athleteSummary,
+      evidencePaths: sciencePaths,
       codexResult,
     }
 
@@ -1234,7 +1372,7 @@ async function processGenerationJob({ jobId, files, driveSources, feedback }) {
       status: 'succeeded',
       progress: 100,
       stage: 'Scheda pronta',
-      result: normalizeGenerateResult({ runId, codexResult, shareData, files }),
+      result: normalizeDirectGenerateResult({ runId, codexResult, shareId, sharePath, files }),
     })
   } catch (error) {
     updateJob(jobId, {
@@ -1333,62 +1471,6 @@ app.put('/api/share/:shareId', async (request, response) => {
   await ensureDir(sharesDir)
   await fs.writeFile(sharePath, JSON.stringify(payload, null, 2))
   response.json(payload)
-})
-
-app.post('/api/athlete-context', upload.array('sources', 12), async (request, response) => {
-  if (runInProgress) {
-    response.status(409).json({
-      error: 'C’e gia un job Codex in corso. Aspetta che finisca prima di prepararne un altro.',
-    })
-    return
-  }
-
-  const files = request.files ?? []
-  const athleteName = request.body.athleteName
-
-  if (!athleteName?.trim()) {
-    response.status(400).json({ error: 'Il nome atleta e obbligatorio.' })
-    return
-  }
-
-  if (files.length === 0) {
-    response.status(400).json({ error: 'Servono almeno una scheda o un riepilogo atleta.' })
-    return
-  }
-
-  const athleteSlug = slugify(athleteName)
-  const jobId = `${todayStamp()}-${athleteSlug}-context-${Date.now()}`
-  jobs.set(jobId, {
-    jobId,
-    status: 'queued',
-    progress: 3,
-    stage: 'Preparazione contesto accodata',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  })
-  runInProgress = true
-
-  response.status(202).json({
-    jobId,
-    status: 'queued',
-    statusUrl: `/api/jobs/${jobId}`,
-  })
-
-  setImmediate(() => {
-    processContextJob({ jobId, files, athleteName })
-  })
-})
-
-app.get('/api/athlete-context/:athleteSlug', async (request, response) => {
-  const athleteSlug = slugify(request.params.athleteSlug)
-  const context = await getPreparedContext(athleteSlug)
-
-  if (!context) {
-    response.status(404).json({ error: 'Contesto atleta non preparato.' })
-    return
-  }
-
-  response.json(context)
 })
 
 app.post('/api/generate', upload.array('sources', 6), async (request, response) => {

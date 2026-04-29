@@ -43,7 +43,6 @@ import type {
   TrainerAthlete,
   UploadedDraft,
   ShareExercise,
-  AthleteContextSummary,
 } from './types'
 
 const GOOGLE_SCOPES =
@@ -97,15 +96,6 @@ function buildShareUrl(shareId: string) {
 
 function apiUrl(path: string) {
   return `${API_BASE_URL}${path}`
-}
-
-function slugifyLocal(value: string) {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
 }
 
 function sleep(ms: number) {
@@ -936,10 +926,6 @@ function TrainerPage() {
   const [previewLoadingId, setPreviewLoadingId] = useState('')
   const [generationProgress, setGenerationProgress] = useState(0)
   const [generationStage, setGenerationStage] = useState('')
-  const [contextMap, setContextMap] = useState<Record<string, AthleteContextSummary>>({})
-  const [preparingContext, setPreparingContext] = useState(false)
-  const [contextProgress, setContextProgress] = useState(0)
-  const [contextStage, setContextStage] = useState('')
 
   const selectedAthlete = useMemo(
     () => athletes.find((athlete) => athlete.id === selectedId) ?? athletes[0],
@@ -1000,26 +986,6 @@ function TrainerPage() {
     setLocalSources([])
     setSheetPreview(null)
     setActivePreviewSheet(0)
-  }, [selectedAthlete])
-
-  useEffect(() => {
-    if (!selectedAthlete) return
-    const athleteSlug = slugifyLocal(selectedAthlete.name)
-    fetch(apiUrl(`/api/athlete-context/${athleteSlug}`))
-      .then((response) => {
-        if (!response.ok) throw new Error('Contesto non preparato')
-        return readJsonResponse<AthleteContextSummary>(response, 'Contesto non preparato')
-      })
-      .then((context) => {
-        setContextMap((current) => ({ ...current, [selectedAthlete.id]: context }))
-      })
-      .catch(() => {
-        setContextMap((current) => {
-          const next = { ...current }
-          delete next[selectedAthlete.id]
-          return next
-        })
-      })
   }, [selectedAthlete])
 
   function handleSelectFiles(event: ChangeEvent<HTMLInputElement>) {
@@ -1102,100 +1068,6 @@ function TrainerPage() {
     }
   }
 
-  async function prepareAthleteContext() {
-    if (!selectedAthlete) return
-
-    setError('')
-    setMessage('')
-    setPreparingContext(true)
-    setContextProgress(0)
-    setContextStage('Preparazione fonti atleta')
-
-    try {
-      if (selectedAthlete.sources.length > 0 && !accessToken) {
-        throw new Error('Serve il login Google per preparare il contesto atleta.')
-      }
-
-      const formData = new FormData()
-      formData.append('athleteName', selectedAthlete.name)
-      const driveSourceCount = Math.max(selectedAthlete.sources.length, 1)
-
-      for (const [index, source] of selectedAthlete.sources.entries()) {
-        const baseProgress = 8 + Math.round((index / driveSourceCount) * 42)
-        setContextProgress(baseProgress)
-        setContextStage(`Leggo scheda ${index + 1} di ${selectedAthlete.sources.length}`)
-        const file = await downloadDriveSource(source, accessToken)
-        formData.append('sources', file)
-
-        if (source.mimeType.includes('spreadsheet')) {
-          const preview = await buildSheetPreview(source, accessToken)
-          const contextFile = new File(
-            [serializeSheetPreview(preview)],
-            markdownFileName(source.name),
-            { type: 'text/markdown' },
-          )
-          formData.append('sources', contextFile)
-        }
-      }
-
-      setContextProgress(56)
-      setContextStage('Invio a Codex per sintesi atleta')
-      const response = await fetch(apiUrl('/api/athlete-context'), {
-        method: 'POST',
-        body: formData,
-      })
-      const payload = await readJsonResponse<GenerateJobResponse & { error?: string }>(
-        response,
-        'Preparazione contesto non riuscita.',
-      )
-      if (!response.ok) throw new Error(payload.error || 'Preparazione contesto non riuscita.')
-
-      for (;;) {
-        await sleep(3000)
-        const jobResponse = await fetch(apiUrl(`/api/jobs/${payload.jobId}`))
-        const job = await readJsonResponse<GenerateJobStatus>(
-          jobResponse,
-          'Stato preparazione non disponibile.',
-        )
-
-        if (!jobResponse.ok) {
-          throw new Error(job.error || 'Stato preparazione non disponibile.')
-        }
-
-        setContextProgress(Math.max(56, Math.min(100, job.progress || 56)))
-        setContextStage(job.stage || 'Codex sta preparando il contesto atleta')
-
-        if (job.status === 'succeeded') {
-          setContextMap((current) => ({
-            ...current,
-            [selectedAthlete.id]: job.result as AthleteContextSummary,
-          }))
-          break
-        }
-
-        if (job.status === 'failed') {
-          throw new Error(job.error || 'Preparazione contesto non riuscita.')
-        }
-      }
-
-      setContextProgress(100)
-      setContextStage('Contesto atleta pronto')
-      setMessage('Contesto atleta pronto: le prossime generazioni saranno piu veloci.')
-    } catch (contextError) {
-      setError(
-        contextError instanceof Error
-          ? contextError.message
-          : 'Errore durante la preparazione del contesto.',
-      )
-    } finally {
-      setPreparingContext(false)
-      window.setTimeout(() => {
-        setContextProgress(0)
-        setContextStage('')
-      }, 2500)
-    }
-  }
-
   async function generateProgram() {
     if (!selectedAthlete) return
 
@@ -1213,15 +1085,13 @@ function TrainerPage() {
     localSources.forEach((source) => formData.append('sources', source.file))
 
     try {
-      const hasPreparedContext = Boolean(contextMap[selectedAthlete.id])
-
-      if (!hasPreparedContext && selectedAthlete.sources.length > 0 && !accessToken) {
+      if (selectedAthlete.sources.length > 0 && !accessToken) {
         throw new Error('Serve il login Google per usare le schede Drive.')
       }
 
       const driveSourceCount = Math.max(selectedAthlete.sources.length, 1)
 
-      for (const [index, source] of (hasPreparedContext ? [] : selectedAthlete.sources).entries()) {
+      for (const [index, source] of selectedAthlete.sources.entries()) {
         const baseProgress = 8 + Math.round((index / driveSourceCount) * 42)
         setGenerationProgress(baseProgress)
         setGenerationStage(`Scarico scheda ${index + 1} di ${selectedAthlete.sources.length}`)
@@ -1241,12 +1111,8 @@ function TrainerPage() {
         }
       }
 
-      setGenerationProgress(hasPreparedContext ? 48 : 58)
-      setGenerationStage(
-        hasPreparedContext
-          ? 'Invio feedback: usero il contesto atleta gia pronto'
-          : 'Invio fonti al backend',
-      )
+      setGenerationProgress(58)
+      setGenerationStage('Invio storico compatto ed evidence pack')
       const response = await fetch(apiUrl('/api/generate'), {
         method: 'POST',
         body: formData,
@@ -1603,45 +1469,21 @@ function TrainerPage() {
                 </div>
               ))}
 
-              <div className="context-prep-box">
+              <div className="evidence-mini-box">
+                <Brain size={18} />
                 <div>
-                  <strong>
-                    {contextMap[selectedAthlete.id]
-                      ? 'Contesto Codex pronto'
-                      : 'Prepara contesto veloce'}
-                  </strong>
+                  <strong>Generazione evidence-based</strong>
                   <span>
-                    {contextMap[selectedAthlete.id]
-                      ? 'Genera usera profilo sintetico e feedback, senza rileggere tutte le schede.'
-                      : 'Codex sintetizza una volta storico e progressioni. Poi generare sara piu rapido.'}
+                    Codex usa storico atleta, feedback coach e libreria scientifica curata. Niente
+                    wiki LLM o contesto pre-generato.
                   </span>
                 </div>
-                <button
-                  className="ghost-button compact-action"
-                  onClick={prepareAthleteContext}
-                  disabled={preparingContext || generating}
-                >
-                  {preparingContext ? <LoaderCircle className="spin" size={16} /> : <Database size={16} />}
-                  {contextMap[selectedAthlete.id] ? 'Aggiorna' : 'Prepara'}
-                </button>
               </div>
-
-              {(preparingContext || contextProgress > 0) && (
-                <div className="generation-progress">
-                  <div className="generation-progress-top">
-                    <span>{contextStage || 'Preparazione contesto'}</span>
-                    <strong>{contextProgress}%</strong>
-                  </div>
-                  <div className="generation-progress-track">
-                    <div style={{ width: `${contextProgress}%` }} />
-                  </div>
-                </div>
-              )}
 
               <button
                 className="primary-button generate-button"
                 onClick={generateProgram}
-                disabled={generating || preparingContext}
+                disabled={generating}
               >
                 {generating ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />}
                 Genera nuova scheda
