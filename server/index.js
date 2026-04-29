@@ -976,6 +976,31 @@ app.get('/api/share/:shareId', async (request, response) => {
   response.json(payload)
 })
 
+app.put('/api/share/:shareId', async (request, response) => {
+  const shareId = slugify(request.params.shareId)
+  const sharePath = path.join(sharesDir, `${shareId}.json`)
+  const payload = request.body
+
+  if (!payload || typeof payload !== 'object') {
+    response.status(400).json({ error: 'Payload share non valido.' })
+    return
+  }
+
+  if (payload.shareId !== shareId) {
+    response.status(400).json({ error: 'Share ID non coerente con la richiesta.' })
+    return
+  }
+
+  if (!Array.isArray(payload.sessions) || payload.sessions.length === 0) {
+    response.status(400).json({ error: 'La scheda deve contenere almeno una sessione.' })
+    return
+  }
+
+  await ensureDir(sharesDir)
+  await fs.writeFile(sharePath, JSON.stringify(payload, null, 2))
+  response.json(payload)
+})
+
 app.post('/api/generate', upload.array('sources', 6), async (request, response) => {
   if (runInProgress) {
     response.status(409).json({

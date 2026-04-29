@@ -779,6 +779,213 @@ p { margin: 0; }
   transition: width 0.35s ease;
 }
 
+.coach-review-panel {
+  display: grid;
+  gap: 20px;
+  margin-top: 24px;
+  padding: 24px;
+  border-radius: 1.5rem;
+  background: #0f172a;
+  color: white;
+  box-shadow: 0 24px 55px rgba(15, 23, 42, 0.18);
+}
+
+.review-hero,
+.review-publish-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.review-hero h2 {
+  color: white;
+  font-size: clamp(2rem, 4vw, 3.6rem);
+}
+
+.review-hero p {
+  max-width: 82ch;
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.approval-badge {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.approval-badge.is-approved {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.review-meta-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(220px, 0.55fr);
+  gap: 14px;
+}
+
+.review-meta-grid label,
+.review-session {
+  display: grid;
+  gap: 8px;
+}
+
+.review-meta-grid span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.review-meta-grid input,
+.review-meta-grid textarea,
+.review-session input,
+.review-session textarea,
+.review-session select,
+.exercise-editor-row input,
+.exercise-editor-row textarea,
+.exercise-editor-row select {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 13px;
+  border-radius: 0.75rem;
+  background: white;
+  border: 1px solid #dbe3f0;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.review-meta-grid textarea {
+  min-height: 86px;
+}
+
+.review-sessions {
+  display: grid;
+  gap: 16px;
+}
+
+.review-session {
+  padding: 16px;
+  border-radius: 1rem;
+  background: #f8fafc;
+  color: var(--ink);
+}
+
+.review-session-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.session-title-fields {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.4fr) minmax(240px, 0.6fr);
+  gap: 10px;
+}
+
+.session-title-fields input:first-child {
+  font-family: var(--font-oswald);
+  font-size: 1.35rem;
+  text-transform: uppercase;
+}
+
+.session-notes-input {
+  min-height: 64px;
+}
+
+.exercise-editor-list {
+  display: grid;
+  gap: 10px;
+}
+
+.exercise-editor-row {
+  display: grid;
+  grid-template-columns: 118px minmax(180px, 1.1fr) minmax(170px, 1fr) 90px minmax(210px, 1.2fr) 86px minmax(160px, 1fr) 42px;
+  gap: 8px;
+  align-items: stretch;
+  padding: 10px;
+  border-radius: 0.9rem;
+  background: white;
+  border: 1px solid var(--line-strong);
+}
+
+.exercise-editor-row textarea {
+  min-height: 46px;
+  resize: vertical;
+}
+
+.film-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 46px;
+  padding: 0 10px;
+  border-radius: 0.75rem;
+  background: #eef2ff;
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.film-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.icon-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  min-height: 46px;
+  border-radius: 0.75rem;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.icon-danger:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.compact-action {
+  padding: 12px 14px;
+  white-space: nowrap;
+}
+
+.review-publish-bar {
+  align-items: center;
+  padding: 16px;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.review-publish-bar strong,
+.review-publish-bar span {
+  display: block;
+}
+
+.review-publish-bar span {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.9rem;
+}
+
 .result-panel {
   display: flex;
   justify-content: space-between;
@@ -786,6 +993,10 @@ p { margin: 0; }
   align-items: center;
   padding: 22px;
   margin-top: 20px;
+  border-color: #fde68a;
+}
+
+.result-panel.is-share-ready {
   border-color: #bbf7d0;
 }
 
@@ -838,6 +1049,14 @@ p { margin: 0; }
 .ghost-button:hover {
   background: white;
   border-color: var(--muted);
+}
+
+.ghost-button:disabled,
+.is-disabled-link {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* Spin animation */
@@ -1154,14 +1373,20 @@ p { margin: 0; }
 
   .trainer-topbar,
   .athlete-summary,
-  .result-panel {
+  .result-panel,
+  .review-hero,
+  .review-publish-bar {
     flex-direction: column;
     align-items: stretch;
   }
 
   .trainer-grid,
   .workspace-columns,
-  .drive-import-panel {
+  .drive-import-panel,
+  .review-meta-grid,
+  .review-session-head,
+  .session-title-fields,
+  .exercise-editor-row {
     grid-template-columns: 1fr;
   }
 
@@ -1183,6 +1408,23 @@ p { margin: 0; }
   .result-actions,
   .timer-actions {
     flex-direction: column;
+  }
+
+  .coach-review-panel {
+    padding: 16px;
+    border-radius: 1.25rem;
+  }
+
+  .review-session {
+    padding: 12px;
+  }
+
+  .exercise-editor-row {
+    gap: 10px;
+  }
+
+  .icon-danger {
+    width: 100%;
   }
   
   .panel, .timer-card, .athlete-hero, .metric-card, .exercise-main-card, .capture-panel {

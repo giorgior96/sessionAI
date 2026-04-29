@@ -19,7 +19,10 @@ import {
   MessageSquareText,
   Pause,
   Play,
+  Plus,
+  Save,
   Sparkles,
+  Trash2,
   Users,
 } from 'lucide-react'
 import { Link, Route, Routes, useParams } from 'react-router-dom'
@@ -39,6 +42,7 @@ import type {
   StatusResponse,
   TrainerAthlete,
   UploadedDraft,
+  ShareExercise,
 } from './types'
 
 const GOOGLE_SCOPES =
@@ -563,6 +567,270 @@ function collectSheetNotes(preview: SheetPreview, sheetIndex: number) {
   )
 }
 
+function createEmptyExercise(index: number): ShareExercise {
+  return {
+    id: `exercise-${Date.now()}-${index}`,
+    block: 'Main',
+    name: '',
+    prescription: '',
+    restSeconds: 90,
+    notes: '',
+    filmPrompt: '',
+    cameraSuggested: false,
+  }
+}
+
+function ProgramReviewEditor({
+  draft,
+  approved,
+  saving,
+  onChange,
+  onApprove,
+}: {
+  draft: ShareArtifact
+  approved: boolean
+  saving: boolean
+  onChange: (draft: ShareArtifact) => void
+  onApprove: () => void
+}) {
+  function updateDraft(patch: Partial<ShareArtifact>) {
+    onChange({ ...draft, ...patch })
+  }
+
+  function updateSession(sessionIndex: number, patch: Partial<ShareArtifact['sessions'][number]>) {
+    onChange({
+      ...draft,
+      sessions: draft.sessions.map((session, index) =>
+        index === sessionIndex ? { ...session, ...patch } : session,
+      ),
+    })
+  }
+
+  function updateExercise(
+    sessionIndex: number,
+    exerciseIndex: number,
+    patch: Partial<ShareExercise>,
+  ) {
+    onChange({
+      ...draft,
+      sessions: draft.sessions.map((session, currentSessionIndex) =>
+        currentSessionIndex === sessionIndex
+          ? {
+              ...session,
+              exercises: session.exercises.map((exercise, currentExerciseIndex) =>
+                currentExerciseIndex === exerciseIndex ? { ...exercise, ...patch } : exercise,
+              ),
+            }
+          : session,
+      ),
+    })
+  }
+
+  function addExercise(sessionIndex: number) {
+    onChange({
+      ...draft,
+      sessions: draft.sessions.map((session, index) =>
+        index === sessionIndex
+          ? {
+              ...session,
+              exercises: [
+                ...session.exercises,
+                createEmptyExercise(session.exercises.length + 1),
+              ],
+            }
+          : session,
+      ),
+    })
+  }
+
+  function removeExercise(sessionIndex: number, exerciseIndex: number) {
+    onChange({
+      ...draft,
+      sessions: draft.sessions.map((session, index) =>
+        index === sessionIndex
+          ? {
+              ...session,
+              exercises: session.exercises.filter((_, currentIndex) => currentIndex !== exerciseIndex),
+            }
+          : session,
+      ),
+    })
+  }
+
+  return (
+    <section className="coach-review-panel">
+      <div className="review-hero">
+        <div>
+          <p className="panel-kicker">
+            <span className="mini-step">4</span>
+            Revisione coach
+          </p>
+          <h2>{draft.programTitle}</h2>
+          <p>{draft.overview}</p>
+        </div>
+        <div className={`approval-badge ${approved ? 'is-approved' : ''}`}>
+          {approved ? 'Pubblicata' : 'Bozza privata'}
+        </div>
+      </div>
+
+      <div className="review-meta-grid">
+        <label>
+          <span>Titolo scheda</span>
+          <input
+            value={draft.programTitle}
+            onChange={(event) => updateDraft({ programTitle: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>Etichetta settimana</span>
+          <input
+            value={draft.weekLabel}
+            onChange={(event) => updateDraft({ weekLabel: event.target.value })}
+          />
+        </label>
+        <label className="full-span">
+          <span>Overview atleta</span>
+          <textarea
+            value={draft.overview}
+            onChange={(event) => updateDraft({ overview: event.target.value })}
+          />
+        </label>
+      </div>
+
+      <div className="review-sessions">
+        {draft.sessions.map((session, sessionIndex) => (
+          <article className="review-session" key={session.id || sessionIndex}>
+            <div className="review-session-head">
+              <div className="session-title-fields">
+                <input
+                  value={session.title}
+                  onChange={(event) => updateSession(sessionIndex, { title: event.target.value })}
+                  aria-label="Titolo sessione"
+                />
+                <input
+                  value={session.focus}
+                  onChange={(event) => updateSession(sessionIndex, { focus: event.target.value })}
+                  aria-label="Focus sessione"
+                />
+              </div>
+              <button className="ghost-button compact-action" onClick={() => addExercise(sessionIndex)}>
+                <Plus size={16} />
+                Esercizio
+              </button>
+            </div>
+            <textarea
+              className="session-notes-input"
+              value={session.notes}
+              onChange={(event) => updateSession(sessionIndex, { notes: event.target.value })}
+              aria-label="Note sessione"
+            />
+
+            <div className="exercise-editor-list">
+              {session.exercises.map((exercise, exerciseIndex) => (
+                <div className="exercise-editor-row" key={exercise.id || exerciseIndex}>
+                  <select
+                    value={exercise.block}
+                    onChange={(event) =>
+                      updateExercise(sessionIndex, exerciseIndex, { block: event.target.value })
+                    }
+                    aria-label="Blocco esercizio"
+                  >
+                    <option>Warm-up</option>
+                    <option>Main</option>
+                    <option>Accessory</option>
+                    <option>Core</option>
+                    <option>Conditioning</option>
+                    <option>Other</option>
+                  </select>
+                  <input
+                    value={exercise.name}
+                    onChange={(event) =>
+                      updateExercise(sessionIndex, exerciseIndex, { name: event.target.value })
+                    }
+                    placeholder="Esercizio"
+                    aria-label="Nome esercizio"
+                  />
+                  <input
+                    value={exercise.prescription}
+                    onChange={(event) =>
+                      updateExercise(sessionIndex, exerciseIndex, {
+                        prescription: event.target.value,
+                      })
+                    }
+                    placeholder="Serie, reps, tempo"
+                    aria-label="Prescrizione esercizio"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    step={15}
+                    value={exercise.restSeconds}
+                    onChange={(event) =>
+                      updateExercise(sessionIndex, exerciseIndex, {
+                        restSeconds: Number(event.target.value),
+                      })
+                    }
+                    aria-label="Recupero in secondi"
+                  />
+                  <textarea
+                    value={exercise.notes}
+                    onChange={(event) =>
+                      updateExercise(sessionIndex, exerciseIndex, { notes: event.target.value })
+                    }
+                    placeholder="Note tecniche"
+                    aria-label="Note esercizio"
+                  />
+                  <label className="film-toggle">
+                    <input
+                      type="checkbox"
+                      checked={exercise.cameraSuggested}
+                      onChange={(event) =>
+                        updateExercise(sessionIndex, exerciseIndex, {
+                          cameraSuggested: event.target.checked,
+                        })
+                      }
+                    />
+                    Video
+                  </label>
+                  <input
+                    value={exercise.filmPrompt}
+                    onChange={(event) =>
+                      updateExercise(sessionIndex, exerciseIndex, {
+                        filmPrompt: event.target.value,
+                      })
+                    }
+                    placeholder="Prompt video"
+                    aria-label="Prompt video"
+                  />
+                  <button
+                    className="icon-danger"
+                    onClick={() => removeExercise(sessionIndex, exerciseIndex)}
+                    aria-label="Rimuovi esercizio"
+                    disabled={session.exercises.length <= 1}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="review-publish-bar">
+        <div>
+          <strong>Controlla, integra, poi pubblica.</strong>
+          <span>Il link atleta usa solo la versione salvata con la convalida coach.</span>
+        </div>
+        <button className="primary-button" onClick={onApprove} disabled={saving}>
+          {saving ? <LoaderCircle className="spin" size={18} /> : <Save size={18} />}
+          Convalida e pubblica
+        </button>
+      </div>
+    </section>
+  )
+}
+
 function buildInitialFeedback(athlete: TrainerAthlete): FeedbackFormState {
   return {
     athleteName: athlete.name,
@@ -657,6 +925,9 @@ function TrainerPage() {
   const [previewLoadingId, setPreviewLoadingId] = useState('')
   const [generationProgress, setGenerationProgress] = useState(0)
   const [generationStage, setGenerationStage] = useState('')
+  const [draftShare, setDraftShare] = useState<ShareArtifact | null>(null)
+  const [shareApproved, setShareApproved] = useState(false)
+  const [savingShare, setSavingShare] = useState(false)
 
   const selectedAthlete = useMemo(
     () => athletes.find((athlete) => athlete.id === selectedId) ?? athletes[0],
@@ -714,6 +985,8 @@ function TrainerPage() {
     if (!selectedAthlete) return
     setFeedback(buildInitialFeedback(selectedAthlete))
     setResult(null)
+    setDraftShare(null)
+    setShareApproved(false)
     setLocalSources([])
     setSheetPreview(null)
     setActivePreviewSheet(0)
@@ -775,6 +1048,43 @@ function TrainerPage() {
     }
   }
 
+  async function approveShareDraft() {
+    if (!draftShare || !result) return
+
+    setError('')
+    setMessage('')
+    setSavingShare(true)
+
+    try {
+      const response = await fetch(apiUrl(`/api/share/${draftShare.shareId}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draftShare),
+      })
+      const savedShare = await readJsonResponse<ShareArtifact & { error?: string }>(
+        response,
+        'Salvataggio scheda non riuscito.',
+      )
+
+      if (!response.ok) {
+        throw new Error(savedShare.error || 'Salvataggio scheda non riuscito.')
+      }
+
+      setDraftShare(savedShare)
+      setResult({ ...result, shareData: savedShare, programTitle: savedShare.programTitle })
+      setShareApproved(true)
+      setMessage('Scheda convalidata. Ora puoi condividere il link atleta.')
+    } catch (approveError) {
+      setError(
+        approveError instanceof Error
+          ? approveError.message
+          : 'Non riesco a pubblicare la scheda.',
+      )
+    } finally {
+      setSavingShare(false)
+    }
+  }
+
   async function openSheetPreview(source: DriveSource) {
     setError('')
     setMessage('')
@@ -817,6 +1127,8 @@ function TrainerPage() {
     setMessage('')
     setGenerating(true)
     setResult(null)
+    setDraftShare(null)
+    setShareApproved(false)
     setGenerationProgress(0)
     setGenerationStage('Preparazione input')
 
@@ -867,9 +1179,11 @@ function TrainerPage() {
 
       if ('shareId' in payload) {
         setResult(payload)
+        setDraftShare(payload.shareData)
+        setShareApproved(false)
         setGenerationProgress(100)
-        setGenerationStage('Scheda pronta')
-        setMessage('Scheda generata e pronta per la vista atleta.')
+        setGenerationStage('Bozza pronta per revisione coach')
+        setMessage('Bozza generata. Controllala e convalidala prima di condividerla.')
         return
       }
 
@@ -897,6 +1211,8 @@ function TrainerPage() {
 
         if (job.status === 'succeeded' && job.result) {
           setResult(job.result)
+          setDraftShare(job.result.shareData)
+          setShareApproved(false)
           break
         }
 
@@ -906,8 +1222,8 @@ function TrainerPage() {
       }
 
       setGenerationProgress(100)
-      setGenerationStage('Scheda pronta')
-      setMessage('Scheda generata e pronta per la vista atleta.')
+      setGenerationStage('Bozza pronta per revisione coach')
+      setMessage('Bozza generata. Controllala e convalidala prima di condividerla.')
     } catch (generateError) {
       setError(
         generateError instanceof Error
@@ -1358,24 +1674,47 @@ function TrainerPage() {
               )}
           </section>
 
-          {result && (
-            <section className="result-panel">
-              <div>
-                <p className="panel-kicker">Output atleta</p>
-                <h2>{result.programTitle}</h2>
-                <p className="hero-copy">{result.summary}</p>
-              </div>
-              <div className="result-actions">
-                <button className="ghost-button" onClick={copyShareUrl}>
-                  <Copy size={18} />
-                  Copia link
-                </button>
-                <Link className="primary-button" to={`/share/${result.shareId}`}>
-                  Apri vista atleta
-                  <ExternalLink size={18} />
-                </Link>
-              </div>
-            </section>
+          {result && draftShare && (
+            <>
+              <ProgramReviewEditor
+                draft={draftShare}
+                approved={shareApproved}
+                saving={savingShare}
+                onChange={(nextDraft) => {
+                  setDraftShare(nextDraft)
+                  setShareApproved(false)
+                }}
+                onApprove={approveShareDraft}
+              />
+
+              <section className={`result-panel ${shareApproved ? 'is-share-ready' : ''}`}>
+                <div>
+                  <p className="panel-kicker">Condivisione atleta</p>
+                  <h2>{shareApproved ? 'Link pronto' : 'In attesa di convalida'}</h2>
+                  <p className="hero-copy">
+                    {shareApproved
+                      ? 'La versione approvata e salvata e disponibile per l’allievo.'
+                      : 'Prima controlla e pubblica la bozza coach. Il link resta nascosto fino alla convalida.'}
+                  </p>
+                </div>
+                <div className="result-actions">
+                  <button className="ghost-button" onClick={copyShareUrl} disabled={!shareApproved}>
+                    <Copy size={18} />
+                    Copia link
+                  </button>
+                  <Link
+                    className={`primary-button ${!shareApproved ? 'is-disabled-link' : ''}`}
+                    to={shareApproved ? `/share/${result.shareId}` : '#'}
+                    onClick={(event) => {
+                      if (!shareApproved) event.preventDefault()
+                    }}
+                  >
+                    Apri vista atleta
+                    <ExternalLink size={18} />
+                  </Link>
+                </div>
+              </section>
+            </>
           )}
         </section>
       </section>
