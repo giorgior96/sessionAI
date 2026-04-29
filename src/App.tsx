@@ -726,6 +726,16 @@ function ProgramReviewEditor({
             />
 
             <div className="exercise-editor-list">
+              <div className="exercise-editor-header" aria-hidden="true">
+                <span>Blocco</span>
+                <span>Esercizio</span>
+                <span>Prescrizione</span>
+                <span>Recupero</span>
+                <span>Note tecniche</span>
+                <span>Video</span>
+                <span>Prompt video</span>
+                <span />
+              </div>
               {session.exercises.map((exercise, exerciseIndex) => (
                 <div className="exercise-editor-row" key={exercise.id || exerciseIndex}>
                   <select

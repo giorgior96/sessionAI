@@ -966,10 +966,24 @@ p { margin: 0; }
   gap: 10px;
 }
 
+.exercise-editor-header,
 .exercise-editor-row {
   display: grid;
   grid-template-columns: 118px minmax(180px, 1.1fr) minmax(170px, 1fr) 90px minmax(210px, 1.2fr) 86px minmax(160px, 1fr) 42px;
   gap: 8px;
+}
+
+.exercise-editor-header {
+  align-items: center;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.exercise-editor-row {
   align-items: stretch;
   padding: 10px;
   border-radius: 0.9rem;
@@ -1449,6 +1463,7 @@ p { margin: 0; }
   .review-meta-grid,
   .review-session-head,
   .session-title-fields,
+  .exercise-editor-header,
   .exercise-editor-row {
     grid-template-columns: 1fr;
   }
@@ -1486,6 +1501,10 @@ p { margin: 0; }
 
   .exercise-editor-row {
     gap: 10px;
+  }
+
+  .exercise-editor-header {
+    display: none;
   }
 
   .icon-danger {
