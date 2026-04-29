@@ -736,6 +736,35 @@ p { margin: 0; }
   border-radius: 0.85rem;
 }
 
+.context-prep-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 1rem;
+  background: #eef2ff;
+  border: 1px solid var(--line-strong);
+}
+
+.context-prep-box strong,
+.context-prep-box span {
+  display: block;
+}
+
+.context-prep-box strong {
+  font-size: 0.9rem;
+}
+
+.context-prep-box span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .generate-button {
   width: 100%;
   margin-top: 18px;
@@ -1406,8 +1435,10 @@ p { margin: 0; }
 
   .summary-metrics,
   .result-actions,
-  .timer-actions {
+  .timer-actions,
+  .context-prep-box {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .coach-review-panel {

@@ -16,6 +16,7 @@ const dataDir = path.join(appRoot, 'data')
 const sharesDir = path.join(dataDir, 'shares')
 const runsDir = path.join(dataDir, 'runs')
 const driveCacheDir = path.join(dataDir, 'drive-cache')
+const athleteContextsDir = path.join(dataDir, 'athlete-contexts')
 const upload = multer({ storage: multer.memoryStorage() })
 const app = express()
 const port = Number(process.env.PORT ?? 8787)
@@ -56,6 +57,35 @@ const outputSchema = {
     program_path: { type: 'string' },
     share_path: { type: 'string' },
     share_id: { type: 'string' },
+    updated_paths: {
+      type: 'array',
+      items: { type: 'string' },
+    },
+  },
+}
+
+const contextOutputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'summary',
+    'athlete_name',
+    'context_path',
+    'profile_path',
+    'latest_state_path',
+    'source_paths',
+    'updated_paths',
+  ],
+  properties: {
+    summary: { type: 'string' },
+    athlete_name: { type: 'string' },
+    context_path: { type: 'string' },
+    profile_path: { type: 'string' },
+    latest_state_path: { type: 'string' },
+    source_paths: {
+      type: 'array',
+      items: { type: 'string' },
+    },
     updated_paths: {
       type: 'array',
       items: { type: 'string' },
@@ -507,12 +537,134 @@ Alla fine restituisci SOLO un JSON valido che rispetta esattamente lo schema for
 `.trim()
 }
 
-async function runCodex(prompt, runId) {
+function buildContextPrompt({
+  athleteName,
+  uploadedSourcePaths,
+  contextRelativePath,
+  profileRelativePath,
+  latestStateRelativePath,
+}) {
+  return `
+Stai lavorando nel repository ${repoRoot}.
+
+Devi preparare un contesto compatto e riusabile per generazioni veloci di schede.
+
+Atleta: ${athleteName}
+
+Fonti caricate, tutte appartenenti SOLO a questo atleta:
+${uploadedSourcePaths.map((sourcePath) => `- ${sourcePath}`).join('\n')}
+
+Task:
+1. Leggi le fonti elencate e solo eventuali pagine wiki che citano esplicitamente "${athleteName}".
+2. Non usare dati di altri atleti.
+3. Crea/aggiorna:
+   - ${profileRelativePath}: profilo durevole atleta.
+   - ${latestStateRelativePath}: stato attuale operativo, progressioni, esercizi ricorrenti, limiti, note, ultimo blocco utile.
+   - ${contextRelativePath}: JSON compatto con campi liberi utili alla generazione veloce.
+4. Mantieni il contesto breve ma completo: obiettivi ricorrenti, progressioni, volumi storici, segnali di recupero/dolore, esercizi da preferire/evitare, stile delle schede.
+5. Non generare una nuova scheda in questa fase.
+
+Alla fine restituisci SOLO un JSON valido secondo lo schema fornito dal chiamante.
+`.trim()
+}
+
+function buildFastPrompt({
+  feedback,
+  checkinSourcePath,
+  contextRelativePath,
+  profileRelativePath,
+  latestStateRelativePath,
+  shareRelativePath,
+  shareId,
+}) {
+  const coachContext = JSON.stringify(
+    {
+      athleteName: feedback.athleteName,
+      coachName: feedback.coachName,
+      primaryGoal: feedback.primaryGoal,
+      trainingDays: Number(feedback.trainingDays),
+      energy: feedback.energy,
+      recovery: feedback.recovery,
+      adherence: feedback.adherence,
+      pain: feedback.pain,
+      topLimitation: feedback.topLimitation,
+      feedbackNotes: feedback.feedbackNotes,
+      filmingReminder: feedback.filmingReminder === 'true',
+    },
+    null,
+    2,
+  )
+
+  return `
+Stai lavorando nel repository ${repoRoot}.
+
+Generazione veloce per ${feedback.athleteName}.
+
+Leggi SOLO questi file:
+- ${contextRelativePath}
+- ${profileRelativePath}
+- ${latestStateRelativePath}
+- ${checkinSourcePath}
+
+Non rileggere raw/sources se non strettamente indispensabile. Non usare dati di altri atleti.
+Non aggiornare il wiki in questa fase: devi produrre rapidamente programma e share JSON.
+
+Contesto coach:
+\`\`\`json
+${coachContext}
+\`\`\`
+
+Task:
+1. Crea o aggiorna un programma operativo in wiki/programs/ per ${feedback.athleteName}.
+2. Crea il JSON mobile-friendly in ${shareRelativePath}.
+3. La scheda deve basarsi su contesto atleta sintetizzato, feedback coach e principi evidence-informed: progressione, specificita, gestione fatica, recupero, prossimita al cedimento, tecnica.
+4. Usa una struttura chiara per coach e atleta, niente placeholder.
+
+Il JSON share deve avere questa struttura:
+\`\`\`json
+{
+  "shareId": "${shareId}",
+  "athleteName": "string",
+  "coachName": "string",
+  "programTitle": "string",
+  "programPath": "wiki/programs/...",
+  "analysisPath": "wiki/analyses/...",
+  "generatedAt": "ISO-8601 string",
+  "weekLabel": "string",
+  "overview": "string",
+  "sessions": [
+    {
+      "id": "day-1",
+      "title": "Day 1",
+      "focus": "string",
+      "notes": "string",
+      "exercises": [
+        {
+          "id": "exercise-id",
+          "block": "Warm-up|Main|Accessory|Core|Conditioning|Other",
+          "name": "string",
+          "prescription": "string",
+          "restSeconds": 90,
+          "notes": "string",
+          "filmPrompt": "string",
+          "cameraSuggested": true
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
+
+Alla fine restituisci SOLO un JSON valido secondo lo schema fornito dal chiamante.
+`.trim()
+}
+
+async function runCodex(prompt, runId, schema = outputSchema) {
   const schemaPath = path.join(runsDir, `${runId}-schema.json`)
   const outputPath = path.join(runsDir, `${runId}-response.json`)
   const logPath = path.join(runsDir, `${runId}.log`)
 
-  await fs.writeFile(schemaPath, JSON.stringify(outputSchema, null, 2))
+  await fs.writeFile(schemaPath, JSON.stringify(schema, null, 2))
 
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -636,6 +788,21 @@ async function saveCheckinSource(feedback, uploadedSources, athleteSlug) {
 
   await fs.writeFile(fullPath, contents)
   return relativePath
+}
+
+async function getPreparedContext(athleteSlug) {
+  const contextPath = path.join(athleteContextsDir, `${athleteSlug}.json`)
+  if (!(await pathExists(contextPath))) return null
+
+  try {
+    const payload = JSON.parse(await fs.readFile(contextPath, 'utf8'))
+    if (!payload.context_path || !payload.profile_path || !payload.latest_state_path) {
+      return null
+    }
+    return payload
+  } catch {
+    return null
+  }
 }
 
 function normalizeGenerateResult({ runId, codexResult, shareData, files }) {
@@ -807,6 +974,99 @@ function updateJob(jobId, patch) {
   })
 }
 
+async function processContextJob({ jobId, files, athleteName }) {
+  runInProgress = true
+  updateJob(jobId, {
+    status: 'running',
+    progress: 10,
+    stage: 'Salvo schede atleta',
+  })
+
+  try {
+    await ensureKnowledgeBase()
+    await ensureDir(rawSourcesDir)
+    await ensureDir(runsDir)
+    await ensureDir(athleteContextsDir)
+
+    const athleteSlug = slugify(athleteName)
+    const runId = `${todayStamp()}-${athleteSlug}-context-${nowStamp()}`
+    const profileRelativePath = `wiki/athletes/${athleteSlug}/profile.md`
+    const latestStateRelativePath = `wiki/athletes/${athleteSlug}/latest-state.md`
+    const contextRelativePath = `data/athlete-contexts/${athleteSlug}.json`
+
+    updateJob(jobId, {
+      runId,
+      progress: 32,
+      stage: 'Codex sintetizza storico e progressioni',
+    })
+
+    const uploadedSourcePaths = await saveUploadedSources(files, athleteSlug)
+    const prompt = buildContextPrompt({
+      athleteName,
+      uploadedSourcePaths,
+      contextRelativePath,
+      profileRelativePath,
+      latestStateRelativePath,
+    })
+
+    const codexResult = await runCodex(prompt, runId, contextOutputSchema)
+
+    const contextFullPath = path.join(repoRoot, codexResult.context_path || contextRelativePath)
+    if (!(await pathExists(contextFullPath))) {
+      await ensureDir(path.dirname(contextFullPath))
+      await fs.writeFile(
+        contextFullPath,
+        JSON.stringify(
+          {
+            athlete_name: codexResult.athlete_name || athleteName,
+            summary: codexResult.summary,
+            source_paths: uploadedSourcePaths,
+            profile_path: profileRelativePath,
+            latest_state_path: latestStateRelativePath,
+            updated_at: new Date().toISOString(),
+          },
+          null,
+          2,
+        ),
+      )
+    }
+
+    const normalizedContext = {
+      ...codexResult,
+      athlete_name: codexResult.athlete_name || athleteName,
+      context_path: codexResult.context_path || contextRelativePath,
+      profile_path: codexResult.profile_path || profileRelativePath,
+      latest_state_path: codexResult.latest_state_path || latestStateRelativePath,
+      source_paths: codexResult.source_paths?.length ? codexResult.source_paths : uploadedSourcePaths,
+      updated_at: new Date().toISOString(),
+    }
+
+    await fs.writeFile(
+      path.join(athleteContextsDir, `${athleteSlug}.json`),
+      JSON.stringify(normalizedContext, null, 2),
+    )
+
+    updateJob(jobId, {
+      status: 'succeeded',
+      progress: 100,
+      stage: 'Contesto atleta pronto',
+      result: normalizedContext,
+    })
+  } catch (error) {
+    updateJob(jobId, {
+      status: 'failed',
+      progress: 100,
+      stage: 'Preparazione contesto interrotta',
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Errore non previsto durante la preparazione del contesto.',
+    })
+  } finally {
+    runInProgress = false
+  }
+}
+
 async function processGenerationJob({ jobId, files, driveSources, feedback }) {
   runInProgress = true
   updateJob(jobId, {
@@ -824,21 +1084,23 @@ async function processGenerationJob({ jobId, files, driveSources, feedback }) {
     const runId = `${todayStamp()}-${athleteSlug}-${nowStamp()}`
     const shareId = `${todayStamp()}-${athleteSlug}-${Date.now()}`
     const shareRelativePath = path.relative(repoRoot, path.join(sharesDir, `${shareId}.json`))
+    const preparedContext = await getPreparedContext(athleteSlug)
 
     updateJob(jobId, {
       runId,
       progress: 25,
-      stage: 'Salvo schede e commenti importati',
+      stage: preparedContext ? 'Uso contesto atleta gia preparato' : 'Salvo schede e commenti importati',
     })
 
-    const relevantWikiPaths = await collectRelevantWikiPaths(feedback.athleteName)
-    const uploadedSourcePaths = [
-      ...(await saveUploadedSources(files, athleteSlug)),
-      ...(await saveDriveSources(Array.isArray(driveSources) ? driveSources : [], athleteSlug)),
-    ]
+    const uploadedSourcePaths = preparedContext
+      ? []
+      : [
+          ...(await saveUploadedSources(files, athleteSlug)),
+          ...(await saveDriveSources(Array.isArray(driveSources) ? driveSources : [], athleteSlug)),
+        ]
 
     updateJob(jobId, {
-      progress: 38,
+      progress: preparedContext ? 42 : 38,
       stage: 'Creo check-in coach',
     })
 
@@ -848,18 +1110,34 @@ async function processGenerationJob({ jobId, files, driveSources, feedback }) {
       athleteSlug,
     )
 
-    const prompt = buildPrompt({
-      feedback,
-      uploadedSourcePaths,
-      checkinSourcePath,
-      relevantWikiPaths,
-      shareRelativePath,
-      shareId,
-    })
+    const relevantWikiPaths = preparedContext
+      ? []
+      : await collectRelevantWikiPaths(feedback.athleteName)
+
+    const prompt = preparedContext
+      ? buildFastPrompt({
+          feedback,
+          checkinSourcePath,
+          contextRelativePath: preparedContext.context_path,
+          profileRelativePath: preparedContext.profile_path,
+          latestStateRelativePath: preparedContext.latest_state_path,
+          shareRelativePath,
+          shareId,
+        })
+      : buildPrompt({
+          feedback,
+          uploadedSourcePaths,
+          checkinSourcePath,
+          relevantWikiPaths,
+          shareRelativePath,
+          shareId,
+        })
 
     updateJob(jobId, {
-      progress: 48,
-      stage: 'Codex legge storico e fonti scientifiche',
+      progress: preparedContext ? 62 : 48,
+      stage: preparedContext
+        ? 'Codex genera da profilo sintetico'
+        : 'Codex legge storico e fonti scientifiche',
     })
 
     const codexResult = await runCodex(prompt, runId)
@@ -999,6 +1277,62 @@ app.put('/api/share/:shareId', async (request, response) => {
   await ensureDir(sharesDir)
   await fs.writeFile(sharePath, JSON.stringify(payload, null, 2))
   response.json(payload)
+})
+
+app.post('/api/athlete-context', upload.array('sources', 12), async (request, response) => {
+  if (runInProgress) {
+    response.status(409).json({
+      error: 'C’e gia un job Codex in corso. Aspetta che finisca prima di prepararne un altro.',
+    })
+    return
+  }
+
+  const files = request.files ?? []
+  const athleteName = request.body.athleteName
+
+  if (!athleteName?.trim()) {
+    response.status(400).json({ error: 'Il nome atleta e obbligatorio.' })
+    return
+  }
+
+  if (files.length === 0) {
+    response.status(400).json({ error: 'Servono almeno una scheda o un riepilogo atleta.' })
+    return
+  }
+
+  const athleteSlug = slugify(athleteName)
+  const jobId = `${todayStamp()}-${athleteSlug}-context-${Date.now()}`
+  jobs.set(jobId, {
+    jobId,
+    status: 'queued',
+    progress: 3,
+    stage: 'Preparazione contesto accodata',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  })
+  runInProgress = true
+
+  response.status(202).json({
+    jobId,
+    status: 'queued',
+    statusUrl: `/api/jobs/${jobId}`,
+  })
+
+  setImmediate(() => {
+    processContextJob({ jobId, files, athleteName })
+  })
+})
+
+app.get('/api/athlete-context/:athleteSlug', async (request, response) => {
+  const athleteSlug = slugify(request.params.athleteSlug)
+  const context = await getPreparedContext(athleteSlug)
+
+  if (!context) {
+    response.status(404).json({ error: 'Contesto atleta non preparato.' })
+    return
+  }
+
+  response.json(context)
 })
 
 app.post('/api/generate', upload.array('sources', 6), async (request, response) => {

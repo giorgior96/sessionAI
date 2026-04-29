@@ -81,8 +81,19 @@ export interface GenerateJobStatus extends GenerateJobResponse {
   stage: string
   createdAt: string
   updatedAt: string
-  result?: GenerateResponse
+  result?: GenerateResponse | AthleteContextSummary
   error?: string
+}
+
+export interface AthleteContextSummary {
+  summary: string
+  athlete_name: string
+  context_path: string
+  profile_path: string
+  latest_state_path: string
+  source_paths: string[]
+  updated_paths: string[]
+  updated_at?: string
 }
 
 export interface StatusResponse {
