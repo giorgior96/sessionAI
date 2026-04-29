@@ -773,6 +773,27 @@ p { margin: 0; }
   line-height: 1.4;
 }
 
+.evidence-strip {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: 1rem;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+  color: #064e3b;
+}
+
+.evidence-strip strong,
+.evidence-strip span {
+  display: block;
+}
+
+.evidence-strip span {
+  margin-top: 4px;
+  color: #047857;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
 .generate-button {
   width: 100%;
   margin-top: 18px;

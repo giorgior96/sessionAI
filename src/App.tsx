@@ -1905,6 +1905,20 @@ function ReviewPage() {
 
       {draftShare ? (
         <>
+          <section className="evidence-strip">
+            <div>
+              <p className="panel-kicker">
+                <Brain size={16} />
+                Base scientifica
+              </p>
+              <strong>La bozza usa evidence pack locali letti da Codex.</strong>
+              <span>
+                Progressione, specificita, gestione fatica, recupero e load management vengono
+                applicati insieme allo storico atleta.
+              </span>
+            </div>
+          </section>
+
           <ProgramReviewEditor
             draft={draftShare}
             approved={shareApproved}

@@ -282,6 +282,7 @@ async function ensureKnowledgeBase() {
   await ensureDir(path.join(repoRoot, 'wiki/programs'))
   await ensureDir(path.join(repoRoot, 'wiki/meta'))
   await ensureDir(path.join(repoRoot, 'wiki/athletes'))
+  await ensureDir(path.join(repoRoot, 'wiki/science'))
   await ensureDir(rawSourcesDir)
 
   for (const [filePath, contents] of requiredFiles.entries()) {
@@ -332,6 +333,49 @@ function athleteTokens(value) {
         .filter((token) => token.length >= 3),
     ),
   )
+}
+
+function selectSciencePaths(feedback = {}) {
+  const text = [
+    feedback.primaryGoal,
+    feedback.topLimitation,
+    feedback.feedbackNotes,
+    feedback.pain,
+  ]
+    .join(' ')
+    .toLowerCase()
+
+  const paths = new Set([
+    'wiki/science/resistance-training-principles.md',
+    'wiki/science/recovery-and-fatigue.md',
+    'wiki/science/calisthenics-goal-rules.md',
+  ])
+
+  if (
+    /front|lever|planche|handstand|hspu|muscle|skill|isometric|tenuta|verticale/i.test(text)
+  ) {
+    paths.add('wiki/science/skill-and-isometric-training.md')
+  }
+
+  if (
+    feedback.pain === 'managed' ||
+    feedback.pain === 'present' ||
+    /dolor|pain|spalla|gomito|polso|tendin|fastidio|infiam/i.test(text)
+  ) {
+    paths.add('wiki/science/load-management-and-tendons.md')
+  }
+
+  return Array.from(paths)
+}
+
+function formatScienceInstruction(sciencePaths) {
+  return `
+Principi scientifici da applicare obbligatoriamente:
+${sciencePaths.map((sciencePath) => `- ${sciencePath}`).join('\n')}
+
+Usali come evidence pack pratico. Non fare ricerca web. Non inventare studi.
+Nel memo/programma collega le scelte principali a questi principi: progressione, specificita, gestione fatica, recupero, tolleranza dei tessuti, qualita tecnica.
+`.trim()
 }
 
 async function collectRelevantWikiPaths(athleteName) {
@@ -432,6 +476,7 @@ function buildPrompt({
   uploadedSourcePaths,
   checkinSourcePath,
   relevantWikiPaths,
+  sciencePaths,
   shareRelativePath,
   shareId,
 }) {
@@ -462,9 +507,13 @@ Prima di fare qualsiasi scelta:
 1. leggi wiki/index.md
 2. leggi SOLO queste pagine del wiki come contesto iniziale, salvo che si rivelino chiaramente insufficienti:
 ${relevantWikiPaths.map((pagePath) => `   - ${pagePath}`).join('\n')}
-3. evita esplorazioni ampie del repository se non strettamente necessarie
-4. tratta i nuovi input come fonti da ingerire
-5. VINCOLO DI ISOLAMENTO ATLETA: usa solo le nuove fonti elencate qui sotto e pagine wiki che citano esplicitamente "${feedback.athleteName}". Non usare schede, programmi, note, metriche o progressioni di altri atleti come base decisionale.
+3. leggi questi file scientifici:
+${sciencePaths.map((pagePath) => `   - ${pagePath}`).join('\n')}
+4. evita esplorazioni ampie del repository se non strettamente necessarie
+5. tratta i nuovi input come fonti da ingerire
+6. VINCOLO DI ISOLAMENTO ATLETA: usa solo le nuove fonti elencate qui sotto e pagine wiki che citano esplicitamente "${feedback.athleteName}". Non usare schede, programmi, note, metriche o progressioni di altri atleti come base decisionale.
+
+${formatScienceInstruction(sciencePaths)}
 
 Nuove fonti grezze appena caricate:
 ${uploadedSourcePaths.map((sourcePath) => `- ${sourcePath}`).join('\n')}
@@ -574,6 +623,7 @@ function buildFastPrompt({
   contextRelativePath,
   profileRelativePath,
   latestStateRelativePath,
+  sciencePaths,
   shareRelativePath,
   shareId,
 }) {
@@ -605,9 +655,12 @@ Leggi SOLO questi file:
 - ${profileRelativePath}
 - ${latestStateRelativePath}
 - ${checkinSourcePath}
+${sciencePaths.map((pagePath) => `- ${pagePath}`).join('\n')}
 
 Non rileggere raw/sources se non strettamente indispensabile. Non usare dati di altri atleti.
 Non aggiornare il wiki in questa fase: devi produrre rapidamente programma e share JSON.
+
+${formatScienceInstruction(sciencePaths)}
 
 Contesto coach:
 \`\`\`json
@@ -1085,6 +1138,7 @@ async function processGenerationJob({ jobId, files, driveSources, feedback }) {
     const shareId = `${todayStamp()}-${athleteSlug}-${Date.now()}`
     const shareRelativePath = path.relative(repoRoot, path.join(sharesDir, `${shareId}.json`))
     const preparedContext = await getPreparedContext(athleteSlug)
+    const sciencePaths = selectSciencePaths(feedback)
 
     updateJob(jobId, {
       runId,
@@ -1121,6 +1175,7 @@ async function processGenerationJob({ jobId, files, driveSources, feedback }) {
           contextRelativePath: preparedContext.context_path,
           profileRelativePath: preparedContext.profile_path,
           latestStateRelativePath: preparedContext.latest_state_path,
+          sciencePaths,
           shareRelativePath,
           shareId,
         })
@@ -1129,6 +1184,7 @@ async function processGenerationJob({ jobId, files, driveSources, feedback }) {
           uploadedSourcePaths,
           checkinSourcePath,
           relevantWikiPaths,
+          sciencePaths,
           shareRelativePath,
           shareId,
         })
