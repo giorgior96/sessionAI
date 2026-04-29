@@ -73,6 +73,8 @@ const directGenerationSchema = {
     'program_title',
     'scientific_rationale',
     'share_data',
+    'evidence_used',
+    'assumptions',
   ],
   properties: {
     summary: { type: 'string' },
@@ -81,7 +83,7 @@ const directGenerationSchema = {
     scientific_rationale: { type: 'string' },
     share_data: {
       type: 'object',
-      additionalProperties: true,
+      additionalProperties: false,
       required: [
         'shareId',
         'athleteName',
@@ -108,7 +110,7 @@ const directGenerationSchema = {
           type: 'array',
           items: {
             type: 'object',
-            additionalProperties: true,
+            additionalProperties: false,
             required: ['id', 'title', 'focus', 'notes', 'exercises'],
             properties: {
               id: { type: 'string' },
@@ -119,7 +121,7 @@ const directGenerationSchema = {
                 type: 'array',
                 items: {
                   type: 'object',
-                  additionalProperties: true,
+                  additionalProperties: false,
                   required: [
                     'id',
                     'block',
